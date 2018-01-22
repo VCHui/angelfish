@@ -1,3 +1,3 @@
 [submodule "sunfish"]
 	path = sunfish
-	url = git@github.com:VC-H/sunfish.git
+	url = https://github.com:VC-H/sunfish.git
