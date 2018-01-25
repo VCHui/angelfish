@@ -1,28 +1,63 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from sunfish import Searcher, print_pos
-from sunfish import MATE_LOWER, MATE_UPPER
+from sunfish import Position, print_pos
+from sunfish import Searcher, MATE_LOWER, MATE_UPPER
 from sunfish import tools
 import random
 
 
-def legal(pos,move):
-    """test legality for move on pos;"""
-    nextpos = pos.move(move)
-    nextscores = map(nextpos.value,nextpos.gen_moves())
-    return all(score < MATE_LOWER for score in nextscores)
+class Superposition(Position):
+    """Extended Position class:
+
+    * meth:`rotate`, meth:`nullmove`, and
+      meth:`move` return Superposition instances;
+
+    >>> p0 = tools.parseFEN(tools.FEN_INITIAL)
+    >>> q0 = Superposition(*p0)
+    >>> assert issubclass(Superposition,Position)
+    >>> assert isinstance(q0,Superposition)
+    >>> assert tuple(q0) == tuple(p0)
+    >>> assert isinstance(q0.rotate(),Superposition)
+    >>> assert tuple(q0.rotate()) == tuple(p0.rotate())
+    >>> assert isinstance(q0.nullmove(),Superposition)
+    >>> assert tuple(q0.nullmove()) == tuple(p0.nullmove())
+    >>> assert tuple(q0.gen_moves()) == tuple(p0.gen_moves())
+    >>> assert all(map(q0.legal,q0.gen_moves()))
+    >>> q1 = q0.move(q0.gen_moves().send(None))
+    >>> assert isinstance(q1,Superposition)
+
+    """
+
+    def rotate(self):
+        return Superposition(*super().rotate())
+
+    def nullmove(self):
+        return Superposition(*super().nullmove())
+
+    def move(self,move):
+        return Superposition(*super().move(move))
+
+    def legal(self,move):
+        """is `move` not ignore in-check?"""
+        nextpos = self.move(move)
+        nextscores = map(nextpos.value,nextpos.gen_moves())
+        return all(score < MATE_LOWER for score in nextscores)
+
+    def print(self):
+        print_pos(self)
+
 
 def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     """return a generator of moves of a game;"""
-    pos = tools.parseFEN(fen)
+    pos = Superposition(*tools.parseFEN(fen))
     engines = [white,black]
     for ply in range(plies):
         engine = engines[ply%2]
         move,score = engine.search(pos,secs)
         if move is None:
             break
-        if not legal(pos,move):
+        if not pos.legal(move):
             print('{} {} not illegal!'.format(
                 engine.name,tools.mrender(pos,move)))
             break
@@ -35,7 +70,7 @@ def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     for ply,pos,move in game(white,black,plies,secs,fen):
         if ply%2 == 0:
             print()
-            print_pos(pos)
+            pos.print()
             print(tools.renderFEN(pos))
             print('{}-{}'.format(ply+1,ply+2),end=": ")
         print(tools.mrender(pos,move),end="; ")
@@ -56,25 +91,6 @@ class Engine(object):
         return self.__class__.__name__
 
 
-class Fool(Engine):
-    """
-
-    An engine with no strategy:- make random legal moves
-
-
-    """
-
-    def __init__(self):
-        super(Fool,self).__init__()
-
-    def search(self,pos,secs=NotImplemented):
-        moves = [move for move in pos.gen_moves() if legal(pos,move)]
-        if len(moves) == 0:
-            return None,-MATE_UPPER # lost
-        move = random.choice(moves)
-        return move,pos.value(move)
-
-
 class Sunfish(Searcher,Engine):
     """
 
@@ -87,9 +103,31 @@ class Sunfish(Searcher,Engine):
         super(Sunfish,self).__init__()
 
 
+class Fool(Engine):
+    """
+
+    An engine with no strategy:- make random legal moves
+
+
+    """
+
+    def __init__(self):
+        super(Fool,self).__init__()
+
+    def search(self,pos,secs=NotImplemented):
+        moves = [move for move in pos.gen_moves() if pos.legal(move)]
+        if len(moves) == 0:
+            return None,-MATE_UPPER # lost
+        move = random.choice(moves)
+        return move,pos.value(move)
+
+
 if __name__ == '__main__':
 
     import sys
+    import doctest
+    print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
+    scripts = doctest.script_from_examples(Superposition.__doc__)
 
     if sys.argv[0] != "":
         p = play(Fool(),Sunfish())
