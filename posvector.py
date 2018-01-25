@@ -7,10 +7,13 @@ import numpy as np
 
 
 piecetypes = 'PNBRQKpnbrqk'
+piecevalues = dict(zip("."+piecetypes,[0,1,2,3,4,5,6,-1,-2,-3,-4,-5,-6]))
 
-def vrepr(pos):
-    """
-    encode pos.board into an array of 12 bit boards for piecetypes:
+
+def prepr(pos):
+    """encode `pos.board`, pieces on board, into a 12*64-element array:
+
+    * concatenation of 64-element board representation for 12 `piecetypes`
 
     >>> assert len(piecetypes) == 12
     >>> assert piecetypes[:6] == piecetypes[6:].upper()
@@ -29,7 +32,7 @@ def vrepr(pos):
       ... 'RNBQKBNR' )
       True
 
-      >>> v0 = vrepr(p0)
+      >>> v0 = prepr(p0)
       >>> assert len(v0) == 12
       >>> assert all(map((64).__eq__,(map(len,v0))))
       >>> assert all(map(np.dtype(bool).__eq__,map(np.result_type,v0)))
@@ -63,7 +66,7 @@ def vrepr(pos):
       ... '........' )
       True
 
-      >>> v1 = vrepr(p1)
+      >>> v1 = prepr(p1)
       >>> assert all(np.packbits(v1) == np.array([
       ... 0, 0, 0, 0, 0, 0, 0, 0, # P
       ... 0, 0, 0, 0, 0, 0, 0, 0, # N
@@ -80,14 +83,59 @@ def vrepr(pos):
       ... ]))
 
     """
-
     if pos.board.startswith("\n"): # is black
         pos = pos.rotate() # un-rotate to the  conventional orientation
-    squares = np.array(tuple("".join(pos.board.split()))) # strip
+    squares = np.array(list("".join(pos.board.split()))) # strip
     return [(squares == piece) for piece in piecetypes]
+
+
+def brepr(pos):
+    """encode `pos.board`, board of pieces, into a 64-element array:
+
+    * 64 elements correspond to 12 `piecetypes` by their piecevalues;
+
+    >>> assert all(map(piecevalues.__contains__,piecetypes))
+    >>> assert piecevalues.get(".") == 0
+    >>> assert len(piecevalues) == 13
+
+    >>> p0 = tools.parseFEN(tools.FEN_INITIAL)
+    >>> u0 = brepr(p0)
+    >>> assert len(u0) == 64
+
+    >>> assert all(u0 == np.array([
+    ... -4, -2, -3, -5, -6, -3, -2, -4,
+    ... -1, -1, -1, -1, -1, -1, -1, -1,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  1,  1,  1,  1,  1,  1,  1,  1,
+    ...  4,  2,  3,  5,  6,  3,  2,  4,
+    ... ]))
+
+    >>> p1 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
+    >>> u1 = brepr(p1)
+    >>> assert all(brepr(p1) == np.array([
+    ...  0,  0,  0,  0,  0,  0,  0, -6,
+    ...  0,  0,  0,  0,  0,  0,  5,  0,
+    ...  0,  0,  0,  0,  0,  6,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ...  0,  0,  0,  0,  0,  0,  0,  0,
+    ... ]))
+
+    """
+    if pos.board.startswith("\n"): # is black
+        pos = pos.rotate() # un-rotate to the  conventional orientation
+    squares = np.array(list("".join(pos.board.split()))) # strip
+    return np.array(list(map(piecevalues.get,squares)),dtype=np.int8)
+
 
 if __name__ == '__main__':
 
     import doctest
     print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-    scripts = doctest.script_from_examples(vrepr.__doc__) # exec(scripts)
+    scripts = doctest.script_from_examples(
+        prepr.__doc__ + brepr.__doc__) # exec(scripts)
