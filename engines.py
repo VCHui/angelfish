@@ -4,6 +4,7 @@
 from sunfish import Position, print_pos
 from sunfish import Searcher, MATE_LOWER, MATE_UPPER
 from sunfish import tools
+import time
 import random
 
 
@@ -36,7 +37,9 @@ class Superposition(Position):
         return Superposition(*super().nullmove())
 
     def move(self,move):
-        return Superposition(*super().move(move))
+        pos = Superposition(*super().move(move))
+        pos.move_from = move
+        return pos
 
     def legal(self,move):
         """is `move` not ignore check?"""
@@ -59,14 +62,14 @@ def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
             break
         if not pos.legal(move):
             print('{} {} not illegal!'.format(
-                engine.name,tools.mrender(pos,move)))
+                engine,tools.mrender(pos,move)))
             break
         yield ply,pos,move
         pos = pos.move(move)
 
 def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     """play the :func:`game` with outputs;"""
-    print('*: {}; {};'.format(white.name,black.name))
+    print('*: {}; {};'.format(white,black))
     for ply,pos,move in game(white,black,plies,secs,fen):
         if ply%2 == 0:
             print()
@@ -74,7 +77,7 @@ def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
             print(tools.renderFEN(pos))
             print('{}-{}'.format(ply+1,ply+2),end=": ")
         print(tools.mrender(pos,move),end="; ")
-    print('\n{} resigned!'.format([white,black][(ply+1)%2].name))
+    print('\n{} resigned!'.format([white,black][(ply+1)%2]))
     return pos
 
 
@@ -88,15 +91,23 @@ class Engine(object):
 
     MAXDEPTH = 4
 
-    @property
-    def name(self):
-        return self.__class__.__name__
+    def __repr__(self):
+        name = self.__class__.__name__
+        scorefn = self.scorefn.__name__ if hasattr(self,'scorefn') else ""
+        maxdepth = str(self.maxdepth) if hasattr(self,'maxdepth') else ""
+        return ".".join([name,scorefn,maxdepth])
+
 
     @staticmethod
-    def sunfishvalue(pos,move):
-        """Sunfish score function
+    def sunfishscorefn(pos):
+        """just return the sunfish pos.score:
 
-        * examples:
+        .. code-block:: python
+
+           pos_next.score == -(pos.score + pos.value(move))
+
+
+        * examples of sunfish scoring method
 
           >>> # black's turn, white checkmate!
           >>> p1 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
@@ -139,14 +150,14 @@ class Engine(object):
           True
 
         """
-        return pos.value(move)
+        return pos.score
 
     @staticmethod
-    def randomsunfishvalue(pos,move):
+    def randomsunfishscore(pos):
         return random.randint(-MATE_LOWER,MATE_LOWER)
 
     @staticmethod
-    def randomvalue(pow,move):
+    def randomscore(pos):
         return random.random()
 
 
@@ -181,13 +192,61 @@ class Fool(Engine):
         return move,pos.value(move)
 
 
+class Negamax(Engine):
+    """
+
+    Negamax with prunning
+
+
+    """
+
+    def __init__(self,maxdepth=Engine.MAXDEPTH,scorefn=None):
+        super(Negamax,self).__init__()
+        self.maxdepth = maxdepth
+        if scorefn is None:
+            scorefn = Engine.sunfishscorefn
+        self.scorefn = scorefn
+
+    def recursion(self,pos,depth,alpha,beta,child=-1):
+        """recursion method for :class:`Negamax`:"""
+        return self.negamax(pos,depth,alpha,beta) # dropped child index
+
+    def negamax(self,pos,depth,alpha=-MATE_UPPER,beta=MATE_UPPER):
+        if depth == 0 or abs(pos.score) >= MATE_LOWER:
+            return self.scorefn(pos)
+        bestscore = -MATE_UPPER
+        for child,move in enumerate(pos.gen_moves()):
+            nextpos = pos.move(move)
+            score = -self.recursion(nextpos,depth-1,-beta,-alpha,child)
+            if score >= bestscore:
+                bestscore = score
+                if depth == self.depth: # at root
+                    self.bestmove = move
+                alpha = max(alpha,score)
+        return bestscore
+
+    def search(self,pos,secs=1):
+        """a naive iterative deepening search;"""
+        self.depth = self.maxdepth
+        self.bestmove = None
+        score = -MATE_UPPER
+        timestart = time.time()
+        score = self.negamax(pos,self.depth)
+        timespent = time.time() - timestart
+        if self.bestmove and pos.legal(self.bestmove):
+            return self.bestmove,score
+        return None,score
+
+
 if __name__ == '__main__':
 
     import sys
     import doctest
     print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
     scripts = doctest.script_from_examples(
-        Superposition.__doc__ + Engine.sunfishvalue.__doc__)
+        Superposition.__doc__ + Engine.sunfishscorefn.__doc__)
 
     if sys.argv[0] != "":
-        p = play(Fool(),Sunfish())
+        p = play(
+            Negamax(scorefn=Engine.randomsunfishscore,maxdepth=1),
+            Negamax())
