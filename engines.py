@@ -39,7 +39,7 @@ class Superposition(Position):
         return Superposition(*super().move(move))
 
     def legal(self,move):
-        """is `move` not ignore in-check?"""
+        """is `move` not ignore check?"""
         nextpos = self.move(move)
         nextscores = map(nextpos.value,nextpos.gen_moves())
         return all(score < MATE_LOWER for score in nextscores)
@@ -86,9 +86,68 @@ class Engine(object):
 
     """
 
+    MAXDEPTH = 4
+
     @property
     def name(self):
         return self.__class__.__name__
+
+    @staticmethod
+    def sunfishvalue(pos,move):
+        """Sunfish score function
+
+        * examples:
+
+          >>> # black's turn, white checkmate!
+          >>> p1 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
+          >>> assert p1.board.split() == [ # sunfish rotated board for black
+          ... '........',
+          ... '........',
+          ... '........',
+          ... '........',
+          ... '........',
+          ... '..k.....',
+          ... '.q......',
+          ... 'K.......',
+          ... ]
+          >>> p1.board.find("K"), p1.board.find("q")
+          (91, 82)
+          >>> tuple(p1.gen_moves())
+          ((91, 81), (91, 92), (91, 82))
+          >>> p1.value((91,82)) > p1.value((91,92))
+          True
+          >>> p2 = p1.move((91,82)) # black captures white "q"
+          >>> assert p2.board.split() == [
+          ... '........',
+          ... '......k.',
+          ... '.....K..',
+          ... '........',
+          ... '........',
+          ... '........',
+          ... '........',
+          ... '........',
+          ... ]
+          >>> p2.score == -(p1.score + p1.value((91,82)))
+          True
+          >>> p2.board.find("K"), p2.board.find("k")
+          (46, 37)
+          >>> MATE_UPPER > p2.value((46,37)) > MATE_LOWER
+          True
+          >>> len(list(p2.gen_moves())) == 8
+          True
+          >>> max(map(p2.value,p2.gen_moves())) == p2.value((46,37))
+          True
+
+        """
+        return pos.value(move)
+
+    @staticmethod
+    def randomsunfishvalue(pos,move):
+        return random.randint(-MATE_LOWER,MATE_LOWER)
+
+    @staticmethod
+    def randomvalue(pow,move):
+        return random.random()
 
 
 class Sunfish(Searcher,Engine):
@@ -127,7 +186,8 @@ if __name__ == '__main__':
     import sys
     import doctest
     print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-    scripts = doctest.script_from_examples(Superposition.__doc__)
+    scripts = doctest.script_from_examples(
+        Superposition.__doc__ + Engine.sunfishvalue.__doc__)
 
     if sys.argv[0] != "":
         p = play(Fool(),Sunfish())
