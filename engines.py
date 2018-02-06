@@ -257,6 +257,57 @@ class Negamax(Engine):
         return None,score
 
 
+class Minimax(Engine):
+    """Minimax
+
+    """
+
+    MAXDEPTH = 4
+
+    def __init__(
+            self,
+            maxdepth = MAXDEPTH,
+            score = SunfishScore()):
+        super(Minimax,self).__init__()
+        self.maxdepth = maxdepth
+        self.score = score
+        self.upper = self.score.upper
+        self.lower = self.score.lower
+
+    def maximize(self,pos,depth):
+        if depth == 0 or pos.gameover():
+            return self.score(pos)
+        maxscore = -self.upper
+        for move in pos.gen_moves():
+            nextpos = pos.move(move)
+            score = self.minimize(nextpos,depth-1)
+            if score > maxscore:
+                maxscore = score
+                if depth == self.depth:
+                    self.bestmove = move
+        return maxscore
+
+    def minimize(self,pos,depth):
+        if depth == 0 or pos.gameover():
+            # sunfish convention puts the curent player white
+            # black requires score sign reversion
+            return -self.score(pos)
+        minscore = self.upper
+        for move in pos.gen_moves():
+            nextpos = pos.move(move)
+            minscore = min(minscore,self.maximize(nextpos,depth-1))
+        return minscore
+
+    def search(self,pos,secs=NotImplemented):
+        self.bestmove = None
+        self.depth = self.maxdepth
+        score = self.maximize(pos,self.depth)
+        if self.bestmove and pos.legal(self.bestmove):
+            return self.bestmove,score
+        return None,score
+
+
+
 if __name__ == '__main__':
 
     import sys
