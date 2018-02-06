@@ -14,19 +14,40 @@ class Superposition(Position):
     * meth:`rotate`, meth:`nullmove`, and
       meth:`move` return Superposition instances;
 
-    >>> p0 = tools.parseFEN(tools.FEN_INITIAL)
-    >>> q0 = Superposition(*p0)
-    >>> assert issubclass(Superposition,Position)
-    >>> assert isinstance(q0,Superposition)
-    >>> assert tuple(q0) == tuple(p0)
-    >>> assert isinstance(q0.rotate(),Superposition)
-    >>> assert tuple(q0.rotate()) == tuple(p0.rotate())
-    >>> assert isinstance(q0.nullmove(),Superposition)
-    >>> assert tuple(q0.nullmove()) == tuple(p0.nullmove())
-    >>> assert tuple(q0.gen_moves()) == tuple(p0.gen_moves())
-    >>> assert all(map(q0.legal,q0.gen_moves()))
-    >>> q1 = q0.move(q0.gen_moves().send(None))
-    >>> assert isinstance(q1,Superposition)
+    * check move is legal independent of :attr:`score`;
+
+    * test compatibility with :class:`sunfish.Position`:
+
+      >>> p0 = tools.parseFEN(tools.FEN_INITIAL)
+      >>> q0 = Superposition(*p0)
+      >>> assert issubclass(Superposition,Position)
+      >>> assert isinstance(q0,Superposition)
+      >>> assert tuple(q0) == tuple(p0)
+      >>> assert isinstance(q0.rotate(),Superposition)
+      >>> assert tuple(q0.rotate()) == tuple(p0.rotate())
+      >>> assert isinstance(q0.nullmove(),Superposition)
+      >>> assert tuple(q0.nullmove()) == tuple(p0.nullmove())
+      >>> assert tuple(q0.gen_moves()) == tuple(p0.gen_moves())
+      >>> assert all(map(q0.legal,q0.gen_moves()))
+      >>> q1 = q0.move(q0.gen_moves().send(None))
+      >>> assert isinstance(q1,Superposition)
+
+    * legal move tests
+
+      >>> p2 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
+      >>> q2 = Superposition(*p2)
+      >>> assert q2.board.split() == [ # *black plays "K"*
+      ... '........',
+      ... '........',
+      ... '........',
+      ... '........',
+      ... '........',
+      ... '..k.....',
+      ... '.q......',
+      ... 'K.......',
+      ... ]
+      >>> True not in map(q2.legal,q2.gen_moves()) # checkmate!
+      True
 
     """
 
@@ -41,11 +62,14 @@ class Superposition(Position):
         pos.move_from = move
         return pos
 
+    def gameover(self):
+        return "K" not in self.board or "k" not in self.board
+
     def legal(self,move):
         """is `move` not ignore check?"""
         nextpos = self.move(move)
-        nextscores = map(nextpos.value,nextpos.gen_moves())
-        return all(score < MATE_LOWER for score in nextscores)
+        captures = (nextpos.board[move[1]] for move in nextpos.gen_moves())
+        return "k" not in captures
 
     def print(self):
         print_pos(self)
@@ -69,103 +93,84 @@ def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
 
 def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     """play the :func:`game` with outputs;"""
-    print('*: {}; {};'.format(white,black))
+    print("{} v {}".format(white,black))
     for ply,pos,move in game(white,black,plies,secs,fen):
         if ply%2 == 0:
             print()
             pos.print()
             print(tools.renderFEN(pos))
-            print('{}-{}'.format(ply+1,ply+2),end=": ")
-        print(tools.mrender(pos,move),end="; ")
-    print('\n{} resigned!'.format([white,black][(ply+1)%2]))
+            print("\a") # bell
+        print('{}: {}'.format(ply+1,tools.mrender(pos,move)))
+    print('{} resigned!'.format([white,black][(ply+1)%2]))
     return pos
 
 
+class SunfishScore(object):
+    """Encapsulation of `pos.score` and `pos.value` of :mod:`sunfish`
+
+    * the example in :class:`Superposition`
+
+      >>> p2 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
+
+    * **board score is anti-symmetric**
+
+      >>> assert p2.score == -p2.rotate().score
+
+    * moves and :meth:`Position.value`
+
+      >>> p2.board.find("K"), p2.board.find("q")
+      (91, 82)
+      >>> tuple(p2.gen_moves())
+      ((91, 81), (91, 92), (91, 82))
+      >>> p2.value((91,82)) > p2.value((91,92)) > p2.value((91,81))
+      True
+      >>> p3 = p2.move((91,82)) # black captures white "q"
+
+    * **score of a new position**
+
+      >>> assert p3.score == -(p2.score + p2.value((91,82)))
+
+    * checkmate
+
+      >>> p3.board.find("K"), p3.board.find("k")
+      (46, 37)
+      >>> MATE_UPPER > p3.value((46,37)) > MATE_LOWER
+      True
+      >>> len(list(p3.gen_moves())) == 8
+      True
+      >>> max(map(p3.value,p3.gen_moves())) == p3.value((46,37))
+      True
+
+    """
+    def __init__(self):
+        self.lower = MATE_LOWER
+        self.upper = MATE_UPPER
+    def __call__(self,pos):
+        return pos.score
+
+
 class Engine(object):
+    """Chess engine base class
+
+    :meth:`score`:
+        A function to evaluate a score for `pos`.
+
+    :attr:`maxdepth`:
+        Maximum search depth.
+
     """
-
-    Chess engine base class
-
-
-    """
-
-    MAXDEPTH = 4
 
     def __repr__(self):
         name = self.__class__.__name__
-        scorefn = self.scorefn.__name__ if hasattr(self,'scorefn') else ""
-        maxdepth = str(self.maxdepth) if hasattr(self,'maxdepth') else ""
-        return ".".join([name,scorefn,maxdepth])
-
-
-    @staticmethod
-    def sunfishscorefn(pos):
-        """just return the sunfish pos.score:
-
-        .. code-block:: python
-
-           pos_next.score == -(pos.score + pos.value(move))
-
-
-        * examples of sunfish scoring method
-
-          >>> # black's turn, white checkmate!
-          >>> p1 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
-          >>> assert p1.board.split() == [ # sunfish rotated board for black
-          ... '........',
-          ... '........',
-          ... '........',
-          ... '........',
-          ... '........',
-          ... '..k.....',
-          ... '.q......',
-          ... 'K.......',
-          ... ]
-          >>> p1.board.find("K"), p1.board.find("q")
-          (91, 82)
-          >>> tuple(p1.gen_moves())
-          ((91, 81), (91, 92), (91, 82))
-          >>> p1.value((91,82)) > p1.value((91,92))
-          True
-          >>> p2 = p1.move((91,82)) # black captures white "q"
-          >>> assert p2.board.split() == [
-          ... '........',
-          ... '......k.',
-          ... '.....K..',
-          ... '........',
-          ... '........',
-          ... '........',
-          ... '........',
-          ... '........',
-          ... ]
-          >>> p2.score == -(p1.score + p1.value((91,82)))
-          True
-          >>> p2.board.find("K"), p2.board.find("k")
-          (46, 37)
-          >>> MATE_UPPER > p2.value((46,37)) > MATE_LOWER
-          True
-          >>> len(list(p2.gen_moves())) == 8
-          True
-          >>> max(map(p2.value,p2.gen_moves())) == p2.value((46,37))
-          True
-
-        """
-        return pos.score
-
-    @staticmethod
-    def randomsunfishscore(pos):
-        return random.randint(-MATE_LOWER,MATE_LOWER)
-
-    @staticmethod
-    def randomscore(pos):
-        return random.random()
+        if hasattr(self,'score'):
+            name += "." + self.score.__class__.__name__
+        if hasattr(self,'maxdepth'):
+            name += ".maxdepth" + str(self.maxdepth)
+        return name
 
 
 class Sunfish(Searcher,Engine):
-    """
-
-    Sunfish MTDf-bi mix-in with :class:`Engine`
-
+    """Sunfish MTDf-bi mix-in with :class:`Engine`
 
     """
 
@@ -174,10 +179,10 @@ class Sunfish(Searcher,Engine):
 
 
 class Fool(Engine):
-    """
+    """An engine with no strategy
 
-    An engine with no strategy:- make random legal moves
-
+    * make random legal moves;
+    * return :mod:`sunfish` score of the corresponding random move;
 
     """
 
@@ -189,49 +194,63 @@ class Fool(Engine):
         if len(moves) == 0:
             return None,-MATE_UPPER # lost
         move = random.choice(moves)
-        return move,pos.value(move)
+        return move,pos.move(move).score
 
 
 class Negamax(Engine):
+    """Negamax
+
+    * example, the same one as in :class:`SunfishScore`:
+
+      >>> p2 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
+      >>> q2 = Superposition(*p2)
+      >>> g = Negamax()
+      >>> s = g.ordermoves(q2)
+      >>> s,m = zip(*s)
+      >>> m
+      ((91, 81), (91, 92), (91, 82))
+      >>> s[0] > s[1] > s[2]
+      True
+
     """
 
-    Negamax with prunning
+    MAXDEPTH = 4
 
-
-    """
-
-    def __init__(self,maxdepth=Engine.MAXDEPTH,scorefn=None):
+    def __init__(
+            self,
+            maxdepth = MAXDEPTH,
+            score = SunfishScore()):
         super(Negamax,self).__init__()
         self.maxdepth = maxdepth
-        if scorefn is None:
-            scorefn = Engine.sunfishscorefn
-        self.scorefn = scorefn
+        self.score = score
+        self.upper = self.score.upper
+        self.lower = self.score.lower
 
-    def recursion(self,pos,depth,alpha,beta,child=-1):
-        """recursion method for :class:`Negamax`:"""
-        return self.negamax(pos,depth,alpha,beta) # dropped child index
+    def ordermoves(self,pos):
+        """return ``((score,move),...)`` in descending order of the scores"""
+        moves = list(pos.gen_moves())
+        scores = list(self.score(pos.move(move)) for move in moves)
+        return sorted(zip(scores,moves),reverse=True)
 
-    def negamax(self,pos,depth,alpha=-MATE_UPPER,beta=MATE_UPPER):
-        if depth == 0 or abs(pos.score) >= MATE_LOWER:
-            return self.scorefn(pos)
-        bestscore = -MATE_UPPER
-        for child,move in enumerate(pos.gen_moves()):
+    def negamax(self,pos,depth,alpha,beta):
+        if depth == 0 or pos.gameover():
+            return self.score(pos)
+        maxscore = -self.upper
+        for i,move in enumerate(pos.gen_moves()):
             nextpos = pos.move(move)
-            score = -self.recursion(nextpos,depth-1,-beta,-alpha,child)
-            if score >= bestscore:
-                bestscore = score
-                if depth == self.depth: # at root
-                    self.bestmove = move
+            score = -self.negamax(nextpos,depth-1,-beta,-alpha)
+            if score >= maxscore:
+                maxscore = score
                 alpha = max(alpha,score)
-        return bestscore
+                if depth == self.depth:
+                    self.bestmove = move
+        return maxscore
 
-    def search(self,pos,secs=1):
-        """a naive iterative deepening search;"""
-        self.depth = self.maxdepth
+    def search(self,pos,secs=NotImplemented):
         self.bestmove = None
-        score = -MATE_UPPER
         timestart = time.time()
-        score = self.negamax(pos,self.depth)
+        self.depth = self.maxdepth
+        score = self.negamax(pos,self.depth,-self.upper,self.upper)
         timespent = time.time() - timestart
         if self.bestmove and pos.legal(self.bestmove):
             return self.bestmove,score
@@ -244,9 +263,10 @@ if __name__ == '__main__':
     import doctest
     print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
     scripts = doctest.script_from_examples(
-        Superposition.__doc__ + Engine.sunfishscorefn.__doc__)
+        Superposition.__doc__ +
+        SunfishScore.__doc__ +
+        Negamax.__doc__
+        )
 
     if sys.argv[0] != "":
-        p = play(
-            Negamax(scorefn=Engine.randomsunfishscore,maxdepth=1),
-            Negamax())
+        p = play(Fool(),Negamax())
