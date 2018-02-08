@@ -91,6 +91,7 @@ def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
         yield ply,pos,move
         pos = pos.move(move)
 
+
 def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     """play the :func:`game` with outputs;"""
     print("{} v {}".format(white,black))
@@ -105,7 +106,7 @@ def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     return pos
 
 
-class SunfishScore(object):
+class SunfishPolicy(object):
     """Encapsulation of `pos.score` and `pos.value` of :mod:`sunfish`
 
     * the example in :class:`Superposition`
@@ -152,7 +153,7 @@ class SunfishScore(object):
 class Engine(object):
     """Chess engine base class
 
-    :meth:`score`:
+    :meth:`value`:
         A function to evaluate a score for `pos`.
 
     :attr:`maxdepth`:
@@ -162,8 +163,8 @@ class Engine(object):
 
     def __repr__(self):
         name = self.__class__.__name__
-        if hasattr(self,'score'):
-            name += "." + self.score.__class__.__name__
+        if hasattr(self,'value'):
+            name += "." + self.value.__class__.__name__
         if hasattr(self,'maxdepth'):
             name += ".maxdepth" + str(self.maxdepth)
         return name
@@ -200,7 +201,7 @@ class Fool(Engine):
 class Negamax(Engine):
     """Negamax
 
-    * example, the same one as in :class:`SunfishScore`:
+    * example, the same one as in :class:`SunfishPolicy`:
 
       >>> p2 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
       >>> q2 = Superposition(*p2)
@@ -219,22 +220,22 @@ class Negamax(Engine):
     def __init__(
             self,
             maxdepth = MAXDEPTH,
-            score = SunfishScore()):
+            value = SunfishPolicy()):
         super(Negamax,self).__init__()
         self.maxdepth = maxdepth
-        self.score = score
-        self.upper = self.score.upper
-        self.lower = self.score.lower
+        self.value = value
+        self.upper = self.value.upper
+        self.lower = self.value.lower
 
     def ordermoves(self,pos):
         """return ``((score,move),...)`` in descending order of the scores"""
         moves = list(pos.gen_moves())
-        scores = list(self.score(pos.move(move)) for move in moves)
+        scores = list(self.value(pos.move(move)) for move in moves)
         return sorted(zip(scores,moves),reverse=True)
 
     def negamax(self,pos,depth,alpha,beta):
         if depth == 0 or pos.gameover():
-            return self.score(pos)
+            return self.value(pos)
         maxscore = -self.upper
         for i,move in enumerate(pos.gen_moves()):
             nextpos = pos.move(move)
@@ -267,16 +268,16 @@ class Minimax(Engine):
     def __init__(
             self,
             maxdepth = MAXDEPTH,
-            score = SunfishScore()):
+            value = SunfishPolicy()):
         super(Minimax,self).__init__()
         self.maxdepth = maxdepth
-        self.score = score
-        self.upper = self.score.upper
-        self.lower = self.score.lower
+        self.value = value
+        self.upper = self.value.upper
+        self.lower = self.value.lower
 
     def maximize(self,pos,depth):
         if depth == 0 or pos.gameover():
-            return self.score(pos)
+            return self.value(pos)
         maxscore = -self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
@@ -291,7 +292,7 @@ class Minimax(Engine):
         if depth == 0 or pos.gameover():
             # sunfish convention puts the curent player white
             # black requires score sign reversion
-            return -self.score(pos)
+            return -self.value(pos)
         minscore = self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
@@ -307,6 +308,13 @@ class Minimax(Engine):
         return None,score
 
 
+enginedict = dict(
+    Sunfish=Sunfish,
+    Fool=Fool,
+    Minimax=Minimax,
+    Negamax=Negamax,
+    )
+
 
 if __name__ == '__main__':
 
@@ -315,9 +323,12 @@ if __name__ == '__main__':
     print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
     scripts = doctest.script_from_examples(
         Superposition.__doc__ +
-        SunfishScore.__doc__ +
+        SunfishPolicy.__doc__ +
         Negamax.__doc__
         )
 
     if sys.argv[0] != "":
-        p = play(Fool(),Negamax())
+        if len(sys.argv) == 3:
+            white = enginedict[sys.argv[1]]()
+            black = enginedict[sys.argv[2]]()
+            p = play(white,black)
