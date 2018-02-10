@@ -34,8 +34,8 @@ class Superposition(Position):
 
     * legal move tests
 
-      >>> p2 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
-      >>> q2 = Superposition(*p2)
+      >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
+      >>> q2 = Superposition(*tools.parseFEN(FEN_MATE0))
       >>> assert q2.board.split() == [ # *black plays "K"*
       ... '........',
       ... '........',
@@ -88,58 +88,60 @@ def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
             print('{} {} not illegal!'.format(
                 engine,tools.mrender(pos,move)))
             break
-        yield ply,pos,move
+        yield ply,pos,move,score
         pos = pos.move(move)
 
 
 def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     """play the :func:`game` with outputs;"""
     print("{} v {}".format(white,black))
-    for ply,pos,move in game(white,black,plies,secs,fen):
+    for ply,pos,move,score in game(white,black,plies,secs,fen):
         if ply%2 == 0:
             print()
             pos.print()
             print(tools.renderFEN(pos))
             print("\a") # bell
-        print('{}: {}'.format(ply+1,tools.mrender(pos,move)))
-    print('{} resigned!'.format([white,black][(ply+1)%2]))
+            print(ply+1,end=":")
+        print("",tools.mrender(pos,move),end="")
+    print("#")
     return pos
 
 
 class SunfishPolicy(object):
     """Encapsulation of `pos.score` and `pos.value` of :mod:`sunfish`
 
-    * the example in :class:`Superposition`
+    * use ``FEN_MATE0`` as in :class:`Superposition`
 
-      >>> p2 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
+      >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
+      >>> q2 = Superposition(*tools.parseFEN(FEN_MATE0))
 
     * **board score is anti-symmetric**
 
-      >>> assert p2.score == -p2.rotate().score
+      >>> assert q2.score == -q2.rotate().score
 
     * moves and :meth:`Position.value`
 
-      >>> p2.board.find("K"), p2.board.find("q")
+      >>> q2.board.find("K"), q2.board.find("q")
       (91, 82)
-      >>> tuple(p2.gen_moves())
+      >>> tuple(q2.gen_moves())
       ((91, 81), (91, 92), (91, 82))
-      >>> p2.value((91,82)) > p2.value((91,92)) > p2.value((91,81))
+      >>> q2.value((91,82)) > q2.value((91,92)) > q2.value((91,81))
       True
-      >>> p3 = p2.move((91,82)) # black captures white "q"
+      >>> q3 = q2.move((91,82)) # black captures white "q"
 
     * **score of a new position**
 
-      >>> assert p3.score == -(p2.score + p2.value((91,82)))
+      >>> assert q3.score == -(q2.score + q2.value((91,82)))
 
     * checkmate
 
-      >>> p3.board.find("K"), p3.board.find("k")
+      >>> q3.board.find("K"), q3.board.find("k")
       (46, 37)
-      >>> MATE_UPPER > p3.value((46,37)) > MATE_LOWER
+      >>> MATE_UPPER > q3.value((46,37)) > MATE_LOWER
       True
-      >>> len(list(p3.gen_moves())) == 8
+      >>> len(list(q3.gen_moves())) == 8
       True
-      >>> max(map(p3.value,p3.gen_moves())) == p3.value((46,37))
+      >>> max(map(q3.value,q3.gen_moves())) == q3.value((46,37))
       True
 
     """
@@ -200,17 +202,23 @@ class Fool(Engine):
 class Negamax(Engine):
     """Negamax
 
-    * example, the same one as in :class:`SunfishPolicy`:
+    * Negamax and Minimax are equivalent
 
-      >>> p2 = tools.parseFEN('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1')
-      >>> q2 = Superposition(*p2)
-      >>> g = Negamax()
-      >>> s = g.ordermoves(q2)
-      >>> s,m = zip(*s)
+      >>> m = Minimax(maxdepth=5)
       >>> m
-      ((91, 81), (91, 92), (91, 82))
-      >>> s[0] > s[1] > s[2]
+      Minimax.SunfishPolicy.maxdepth5
+      >>> n = Negamax(maxdepth=5)
+      >>> n
+      Negamax.SunfishPolicy.maxdepth5
+
+      >>> FEN_MATE5 = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
+      >>> q5 = Superposition(*tools.parseFEN(FEN_MATE5))
+      >>> m.search(q5) == n.search(q5)
       True
+      >>> all(m.analysis[depth] == n.analysis[depth]
+      ...     for depth in range(1,m.maxdepth+1))
+      True
+
 
     """
 
@@ -223,13 +231,7 @@ class Negamax(Engine):
         super(Negamax,self).__init__()
         self.maxdepth = maxdepth
         self.policy = policy
-        self.upper = self.value.upper
-
-    def ordermoves(self,pos):
-        """return ``((score,move),...)`` in descending order of the scores"""
-        moves = list(pos.gen_moves())
-        scores = list(self.policy.eval(pos.move(move)) for move in moves)
-        return sorted(zip(scores,moves),reverse=True)
+        self.upper = self.policy.upper
 
     def negamax(self,pos,depth,alpha,beta):
         if depth == 0 or pos.gameover():
@@ -241,19 +243,19 @@ class Negamax(Engine):
             if score >= maxscore:
                 maxscore = score
                 alpha = max(alpha,score)
-                if depth == self.depth:
-                    self.bestmove = move
+                self.analysis[depth] = (move,score)
         return maxscore
 
     def search(self,pos,secs=NotImplemented):
-        self.bestmove = None
-        timestart = time.time()
+        self.analysis = {}
         self.depth = self.maxdepth
-        score = self.negamax(pos,self.depth,-self.upper,self.upper)
+        timestart = time.time()
+        bestscore = self.negamax(pos,self.depth,-self.upper,self.upper)
         timespent = time.time() - timestart
-        if self.bestmove and pos.legal(self.bestmove):
-            return self.bestmove,score
-        return None,score
+        bestmove,bestscore = self.analysis.get(self.depth,(None,bestscore))
+        if bestmove and pos.legal(bestmove):
+            return bestmove,bestscore
+        return None,bestscore
 
 
 class Minimax(Engine):
@@ -270,7 +272,7 @@ class Minimax(Engine):
         super(Minimax,self).__init__()
         self.maxdepth = maxdepth
         self.policy = policy
-        self.upper = self.value.upper
+        self.upper = self.policy.upper
 
     def maximize(self,pos,depth):
         if depth == 0 or pos.gameover():
@@ -279,30 +281,37 @@ class Minimax(Engine):
         for move in pos.gen_moves():
             nextpos = pos.move(move)
             score = self.minimize(nextpos,depth-1)
-            if score > maxscore:
+            if score >= maxscore:
                 maxscore = score
+                self.analysis[depth] = (move,score)
                 if depth == self.depth:
                     self.bestmove = move
         return maxscore
 
     def minimize(self,pos,depth):
+        # sunfish convention puts the curent player white
+        # black requires score sign reversion
         if depth == 0 or pos.gameover():
-            # sunfish convention puts the curent player white
-            # black requires score sign reversion
             return -self.policy.eval(pos)
         minscore = self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            minscore = min(minscore,self.maximize(nextpos,depth-1))
+            score = self.maximize(nextpos,depth-1)
+            if score <= minscore:
+                self.analysis[depth] = (move,-score)
+                minscore = score
         return minscore
 
     def search(self,pos,secs=NotImplemented):
-        self.bestmove = None
+        self.analysis = {}
         self.depth = self.maxdepth
-        score = self.maximize(pos,self.depth)
-        if self.bestmove and pos.legal(self.bestmove):
-            return self.bestmove,score
-        return None,score
+        timestart = time.time()
+        bestscore = self.maximize(pos,self.depth)
+        bestmove,bestscore = self.analysis.get(self.depth,(None,bestscore))
+        timespent = time.time() - timestart
+        if bestmove and pos.legal(bestmove):
+            return bestmove,bestscore
+        return None,bestscore
 
 
 enginedict = dict(
