@@ -144,17 +144,16 @@ class SunfishPolicy(object):
 
     """
     def __init__(self):
-        self.lower = MATE_LOWER
         self.upper = MATE_UPPER
-    def __call__(self,pos):
+    def eval(self,pos):
         return pos.score
 
 
 class Engine(object):
     """Chess engine base class
 
-    :meth:`value`:
-        A function to evaluate a score for `pos`.
+    :attr:`policy`:
+        An instance of a policy to evaluate a score for `pos`.
 
     :attr:`maxdepth`:
         Maximum search depth.
@@ -163,8 +162,8 @@ class Engine(object):
 
     def __repr__(self):
         name = self.__class__.__name__
-        if hasattr(self,'value'):
-            name += "." + self.value.__class__.__name__
+        if hasattr(self,'policy'):
+            name += "." + self.policy.__class__.__name__
         if hasattr(self,'maxdepth'):
             name += ".maxdepth" + str(self.maxdepth)
         return name
@@ -220,22 +219,21 @@ class Negamax(Engine):
     def __init__(
             self,
             maxdepth = MAXDEPTH,
-            value = SunfishPolicy()):
+            policy = SunfishPolicy()):
         super(Negamax,self).__init__()
         self.maxdepth = maxdepth
-        self.value = value
+        self.policy = policy
         self.upper = self.value.upper
-        self.lower = self.value.lower
 
     def ordermoves(self,pos):
         """return ``((score,move),...)`` in descending order of the scores"""
         moves = list(pos.gen_moves())
-        scores = list(self.value(pos.move(move)) for move in moves)
+        scores = list(self.policy.eval(pos.move(move)) for move in moves)
         return sorted(zip(scores,moves),reverse=True)
 
     def negamax(self,pos,depth,alpha,beta):
         if depth == 0 or pos.gameover():
-            return self.value(pos)
+            return self.policy.eval(pos)
         maxscore = -self.upper
         for i,move in enumerate(pos.gen_moves()):
             nextpos = pos.move(move)
@@ -268,16 +266,15 @@ class Minimax(Engine):
     def __init__(
             self,
             maxdepth = MAXDEPTH,
-            value = SunfishPolicy()):
+            policy = SunfishPolicy()):
         super(Minimax,self).__init__()
         self.maxdepth = maxdepth
-        self.value = value
+        self.policy = policy
         self.upper = self.value.upper
-        self.lower = self.value.lower
 
     def maximize(self,pos,depth):
         if depth == 0 or pos.gameover():
-            return self.value(pos)
+            return self.policy.eval(pos)
         maxscore = -self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
@@ -292,7 +289,7 @@ class Minimax(Engine):
         if depth == 0 or pos.gameover():
             # sunfish convention puts the curent player white
             # black requires score sign reversion
-            return -self.value(pos)
+            return -self.policy.eval(pos)
         minscore = self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
