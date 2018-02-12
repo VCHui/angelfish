@@ -46,7 +46,8 @@ class Superposition(Position):
       ... '.q......',
       ... 'K.......',
       ... ]
-      >>> True not in map(q2.legal,q2.gen_moves()) # checkmate!
+      >>>
+      >>> not any(map(q2.legal,q2.gen_moves())) # checkmate!
       True
 
     """
@@ -66,10 +67,12 @@ class Superposition(Position):
         return "K" not in self.board or "k" not in self.board
 
     def legal(self,move):
-        """is `move` not ignore check?"""
+        """return `move` if not ignore check else None;"""
         nextpos = self.move(move)
         captures = (nextpos.board[move[1]] for move in nextpos.gen_moves())
-        return "k" not in captures
+        if "k" not in captures:
+            return move
+        return None
 
     def print(self):
         print_pos(self)
@@ -84,7 +87,7 @@ def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
         move,score = engine.search(pos,secs)
         if move is None:
             break
-        if not pos.legal(move):
+        if pos.legal(move) is None:
             print('{} {} not illegal!'.format(
                 engine,tools.mrender(pos,move)))
             break
@@ -192,7 +195,7 @@ class Fool(Engine):
         super(Fool,self).__init__()
 
     def search(self,pos,secs=NotImplemented):
-        moves = [move for move in pos.gen_moves() if pos.legal(move)]
+        moves = [ move for move in pos.gen_moves() if pos.legal(move) ]
         if len(moves) == 0:
             return None,-MATE_UPPER # lost
         move = random.choice(moves)
@@ -215,10 +218,6 @@ class Negamax(Engine):
       >>> q5 = Superposition(*tools.parseFEN(FEN_MATE5))
       >>> m.search(q5) == n.search(q5)
       True
-      >>> all(m.analysis[depth] == n.analysis[depth]
-      ...     for depth in range(1,m.maxdepth+1))
-      True
-
 
     """
 
@@ -236,26 +235,24 @@ class Negamax(Engine):
     def negamax(self,pos,depth,alpha,beta):
         if depth == 0 or pos.gameover():
             return self.policy.eval(pos)
-        maxscore = -self.upper
+        maxscore,bestmove = -self.upper,None
         for i,move in enumerate(pos.gen_moves()):
             nextpos = pos.move(move)
             score = -self.negamax(nextpos,depth-1,-beta,-alpha)
             if score >= maxscore:
-                maxscore = score
+                maxscore,bestmove = score,move
                 alpha = max(alpha,score)
-                self.analysis[depth] = (move,score)
-        return maxscore
+        if depth < self.depth:
+            return maxscore
+        return bestmove,maxscore
 
     def search(self,pos,secs=NotImplemented):
-        self.analysis = {}
         self.depth = self.maxdepth
         timestart = time.time()
-        bestscore = self.negamax(pos,self.depth,-self.upper,self.upper)
+        bestmove,bestscore = self.negamax(
+            pos,self.depth,-self.upper,self.upper)
         timespent = time.time() - timestart
-        bestmove,bestscore = self.analysis.get(self.depth,(None,bestscore))
-        if bestmove and pos.legal(bestmove):
-            return bestmove,bestscore
-        return None,bestscore
+        return pos.legal(bestmove),bestscore
 
 
 class Minimax(Engine):
@@ -277,16 +274,15 @@ class Minimax(Engine):
     def maximize(self,pos,depth):
         if depth == 0 or pos.gameover():
             return self.policy.eval(pos)
-        maxscore = -self.upper
+        maxscore,bestmove = -self.upper,None
         for move in pos.gen_moves():
             nextpos = pos.move(move)
             score = self.minimize(nextpos,depth-1)
             if score >= maxscore:
-                maxscore = score
-                self.analysis[depth] = (move,score)
-                if depth == self.depth:
-                    self.bestmove = move
-        return maxscore
+                maxscore,bestmove = score,move
+        if depth < self.depth:
+            return maxscore
+        return bestmove,maxscore
 
     def minimize(self,pos,depth):
         # sunfish convention puts the curent player white
@@ -296,22 +292,15 @@ class Minimax(Engine):
         minscore = self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            score = self.maximize(nextpos,depth-1)
-            if score <= minscore:
-                self.analysis[depth] = (move,-score)
-                minscore = score
+            minscore = min(minscore,self.maximize(nextpos,depth-1))
         return minscore
 
     def search(self,pos,secs=NotImplemented):
-        self.analysis = {}
         self.depth = self.maxdepth
         timestart = time.time()
-        bestscore = self.maximize(pos,self.depth)
-        bestmove,bestscore = self.analysis.get(self.depth,(None,bestscore))
+        bestmove,bestscore = self.maximize(pos,self.depth)
         timespent = time.time() - timestart
-        if bestmove and pos.legal(bestmove):
-            return bestmove,bestscore
-        return None,bestscore
+        return pos.legal(bestmove),bestscore
 
 
 enginedict = dict(
