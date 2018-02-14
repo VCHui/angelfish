@@ -243,43 +243,6 @@ class Fool(Engine):
         return move,pos.move(move).score
 
 
-class Negamax(Engine):
-    """Negamax
-
-    """
-
-    MAXDEPTH = 3
-
-    def __init__(
-            self,
-            maxdepth = MAXDEPTH,
-            policy = SunfishPolicy()):
-        super(Negamax,self).__init__()
-        self.maxdepth = maxdepth
-        self.policy = policy
-        self.upper = self.policy.upper
-
-    def negamax(self,pos,depth,alpha,beta):
-        if depth == 0 or pos.gameover():
-            return [],self.policy.eval(pos)
-        bestbranch,maxscore = [],-self.upper
-        for i,move in enumerate(pos.gen_moves()):
-            nextpos = pos.move(move)
-            branch,score = self.negamax(nextpos,depth-1,-beta,-alpha)
-            score = -score # nega
-            if score >= maxscore:
-                bestbranch,maxscore = [move,]+branch,score
-                alpha = max(alpha,score)
-        return bestbranch,maxscore
-
-    def search(self,pos,secs=NotImplemented):
-        timestart = time.time()
-        bestbranch,bestscore = self.negamax(
-            pos,self.maxdepth,-self.upper,self.upper)
-        timespent = time.time() - timestart
-        return pos.legal(bestbranch[0]),bestscore
-
-
 class Minimax(Engine):
     """Minimax
 
@@ -323,6 +286,43 @@ class Minimax(Engine):
     def search(self,pos,secs=NotImplemented):
         timestart = time.time()
         bestbranch,bestscore = self.maximize(pos,self.maxdepth)
+        timespent = time.time() - timestart
+        return pos.legal(bestbranch[0]),bestscore
+
+
+class Negamax(Engine):
+    """Negamax
+
+    """
+
+    MAXDEPTH = 3
+
+    def __init__(
+            self,
+            maxdepth = MAXDEPTH,
+            policy = SunfishPolicy()):
+        super(Negamax,self).__init__()
+        self.maxdepth = maxdepth
+        self.policy = policy
+        self.upper = self.policy.upper
+
+    def negamax(self,pos,depth,alpha,beta):
+        if depth == 0 or pos.gameover():
+            return [],self.policy.eval(pos)
+        bestbranch,maxscore = [],-self.upper
+        for i,move in enumerate(pos.gen_moves()):
+            nextpos = pos.move(move)
+            branch,score = self.negamax(nextpos,depth-1,-beta,-alpha)
+            score = -score # nega
+            if score >= maxscore:
+                bestbranch,maxscore = [move,]+branch,score
+                alpha = max(alpha,score)
+        return bestbranch,maxscore
+
+    def search(self,pos,secs=NotImplemented):
+        timestart = time.time()
+        bestbranch,bestscore = self.negamax(
+            pos,self.maxdepth,-self.upper,self.upper)
         timespent = time.time() - timestart
         return pos.legal(bestbranch[0]),bestscore
 
