@@ -1,6 +1,47 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""
+
+* Negamax and Minimax are equivalent
+
+  >>> m = Minimax(maxdepth=5)
+  >>> m
+  Minimax.SunfishPolicy.maxdepth5
+  >>> n = Negamax(maxdepth=5)
+  >>> n
+  Negamax.SunfishPolicy.maxdepth5
+
+  >>> FEN_MATE5 = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
+  >>> q5 = Superposition(*tools.parseFEN(FEN_MATE5))
+  >>> assert q5.board.split() == [
+  ... '.k......',
+  ... '........',
+  ... '..K.....',
+  ... '...R....',
+  ... '........',
+  ... '........',
+  ... '........',
+  ... '........',
+  ... ]
+
+  >>> mbest = m.maximize(q5,m.maxdepth)
+  >>> nbest = n.negamax(q5,n.maxdepth,-n.upper,n.upper)
+  >>> nbest == mbest
+  True
+  >>> bestbranch,bestscore = nbest
+  >>> bestscore > MATE_LOWER
+  True
+  >>> len(bestbranch) == 5
+  True
+  >>> q = q5
+  >>> for move in bestbranch:
+  ...    q = q.move(move)
+  >>> 'K' in q.board
+  False
+
+"""
+
 from sunfish import Position, print_pos
 from sunfish import Searcher, MATE_LOWER, MATE_UPPER
 from sunfish import tools
@@ -205,23 +246,9 @@ class Fool(Engine):
 class Negamax(Engine):
     """Negamax
 
-    * Negamax and Minimax are equivalent
-
-      >>> m = Minimax(maxdepth=5)
-      >>> m
-      Minimax.SunfishPolicy.maxdepth5
-      >>> n = Negamax(maxdepth=5)
-      >>> n
-      Negamax.SunfishPolicy.maxdepth5
-
-      >>> FEN_MATE5 = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
-      >>> q5 = Superposition(*tools.parseFEN(FEN_MATE5))
-      >>> m.search(q5) == n.search(q5)
-      True
-
     """
 
-    MAXDEPTH = 4
+    MAXDEPTH = 3
 
     def __init__(
             self,
@@ -234,25 +261,23 @@ class Negamax(Engine):
 
     def negamax(self,pos,depth,alpha,beta):
         if depth == 0 or pos.gameover():
-            return self.policy.eval(pos)
-        maxscore,bestmove = -self.upper,None
+            return [],self.policy.eval(pos)
+        bestbranch,maxscore = [],-self.upper
         for i,move in enumerate(pos.gen_moves()):
             nextpos = pos.move(move)
-            score = -self.negamax(nextpos,depth-1,-beta,-alpha)
+            branch,score = self.negamax(nextpos,depth-1,-beta,-alpha)
+            score = -score # nega
             if score >= maxscore:
-                maxscore,bestmove = score,move
+                bestbranch,maxscore = [move,]+branch,score
                 alpha = max(alpha,score)
-        if depth < self.depth:
-            return maxscore
-        return bestmove,maxscore
+        return bestbranch,maxscore
 
     def search(self,pos,secs=NotImplemented):
-        self.depth = self.maxdepth
         timestart = time.time()
-        bestmove,bestscore = self.negamax(
-            pos,self.depth,-self.upper,self.upper)
+        bestbranch,bestscore = self.negamax(
+            pos,self.maxdepth,-self.upper,self.upper)
         timespent = time.time() - timestart
-        return pos.legal(bestmove),bestscore
+        return pos.legal(bestbranch[0]),bestscore
 
 
 class Minimax(Engine):
@@ -260,7 +285,7 @@ class Minimax(Engine):
 
     """
 
-    MAXDEPTH = 4
+    MAXDEPTH = 3
 
     def __init__(
             self,
@@ -273,34 +298,33 @@ class Minimax(Engine):
 
     def maximize(self,pos,depth):
         if depth == 0 or pos.gameover():
-            return self.policy.eval(pos)
-        maxscore,bestmove = -self.upper,None
+            return [],self.policy.eval(pos)
+        bestbranch,maxscore = [],-self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            score = self.minimize(nextpos,depth-1)
+            branch,score = self.minimize(nextpos,depth-1)
             if score >= maxscore:
-                maxscore,bestmove = score,move
-        if depth < self.depth:
-            return maxscore
-        return bestmove,maxscore
+                bestbranch,maxscore = [move,]+branch,score
+        return bestbranch,maxscore
 
     def minimize(self,pos,depth):
         # sunfish convention puts the curent player white
         # black requires score sign reversion
         if depth == 0 or pos.gameover():
-            return -self.policy.eval(pos)
-        minscore = self.upper
+            return [],-self.policy.eval(pos)
+        bestbranch,minscore = [],self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            minscore = min(minscore,self.maximize(nextpos,depth-1))
-        return minscore
+            branch,score = self.maximize(nextpos,depth-1)
+            if score <= minscore:
+                bestbranch,minscore = [move,]+branch,score
+        return bestbranch,minscore
 
     def search(self,pos,secs=NotImplemented):
-        self.depth = self.maxdepth
         timestart = time.time()
-        bestmove,bestscore = self.maximize(pos,self.depth)
+        bestbranch,bestscore = self.maximize(pos,self.maxdepth)
         timespent = time.time() - timestart
-        return pos.legal(bestmove),bestscore
+        return pos.legal(bestbranch[0]),bestscore
 
 
 enginedict = dict(
@@ -316,11 +340,7 @@ if __name__ == '__main__':
     import sys
     import doctest
     print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-    scripts = doctest.script_from_examples(
-        Superposition.__doc__ +
-        SunfishPolicy.__doc__ +
-        Negamax.__doc__
-        )
+    scripts = doctest.script_from_examples(__doc__)
 
     if sys.argv[0] != "":
         if len(sys.argv) == 3:
