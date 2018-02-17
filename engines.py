@@ -26,25 +26,48 @@
   ... ]
 
   >>> mbest = m.maximize(q5,m.maxdepth)
-  >>> nbest = n.negamax(q5,n.maxdepth,-n.upper,n.upper)
-  >>> nbest == mbest
+  >>> mbest == n.negamax(q5,n.maxdepth,-n.upper,n.upper)
   True
-  >>> bestbranch,bestscore = nbest
+  >>> bestbranch,bestscore = mbest
   >>> bestscore > MATE_LOWER
   True
-  >>> len(bestbranch) == 5
+  >>> len(bestbranch) == 5+1 and bestbranch[-1] == None
   True
   >>> q = q5
-  >>> for move in bestbranch:
+  >>> for move in bestbranch[:-1]:
   ...    q = q.move(move)
   >>> 'K' in q.board
   False
+  >>> bestmove = bestbranch[0]
+  >>> assert q5.move(bestmove).board.split() == [
+  ... '........',
+  ... '........',
+  ... '........',
+  ... '........',
+  ... '.......r',
+  ... '.....k..',
+  ... '........',
+  ... '......K.',
+  ... ]
+
+* AlphaBeta and Negamax should produce the same outcomes for `q5`
+
+  >>> a = AlphaBeta(maxdepth=11)
+  >>> a
+  AlphaBeta.SunfishPolicy.maxdepth11
+  >>> a.showsearch = False
+  >>> assert a.search(q5) == (bestmove,bestscore)
+  >>> abest = a.tt.get(q5)
+  >>> assert abest.score == bestscore
+  >>> assert abest.branch == bestbranch
 
 """
 
 from sunfish import Position, print_pos
 from sunfish import Searcher, MATE_LOWER, MATE_UPPER
+from sunfish import LRUCache, TABLE_SIZE
 from sunfish import tools
+from collections import OrderedDict, namedtuple
 import time
 import random
 
@@ -260,7 +283,9 @@ class Minimax(Engine):
         self.upper = self.policy.upper
 
     def maximize(self,pos,depth):
-        if depth == 0 or pos.gameover():
+        if pos.gameover():
+            return [None,],self.policy.eval(pos)
+        if depth == 0:
             return [],self.policy.eval(pos)
         bestbranch,maxscore = [],-self.upper
         for move in pos.gen_moves():
@@ -273,7 +298,9 @@ class Minimax(Engine):
     def minimize(self,pos,depth):
         # sunfish convention puts the curent player white
         # black requires score sign reversion
-        if depth == 0 or pos.gameover():
+        if pos.gameover():
+            return [None,],-self.policy.eval(pos)
+        if depth == 0:
             return [],-self.policy.eval(pos)
         bestbranch,minscore = [],self.upper
         for move in pos.gen_moves():
@@ -307,10 +334,12 @@ class Negamax(Engine):
         self.upper = self.policy.upper
 
     def negamax(self,pos,depth,alpha,beta):
-        if depth == 0 or pos.gameover():
+        if pos.gameover():
+            return [None,],self.policy.eval(pos)
+        if depth == 0:
             return [],self.policy.eval(pos)
         bestbranch,maxscore = [],-self.upper
-        for i,move in enumerate(pos.gen_moves()):
+        for move in pos.gen_moves():
             nextpos = pos.move(move)
             branch,score = self.negamax(nextpos,depth-1,-beta,-alpha)
             score = -score # nega
@@ -327,22 +356,143 @@ class Negamax(Engine):
         return pos.legal(bestbranch[0]),bestscore
 
 
+class Entry(namedtuple('Entry',['depth','score','branch','bound'])):
+    """create :obj:`Entry` for the transposition table:
+
+    >>> alpha_o,beta_o = -1,1
+    >>> bound = lambda score:(
+    ...     (score >= beta_o) # BOUND_LOWER
+    ...     -(score <= alpha_o) # BOUND_UPPER
+    ...     # BOUND_EXACT
+    ... )
+    >>> assert bound(+1) == Entry.BOUND_LOWER
+    >>> assert bound(-1) == Entry.BOUND_UPPER
+    >>> assert bound( 0) == Entry.BOUND_EXACT
+
+    """
+    BOUND_LOWER,BOUND_EXACT,BOUND_UPPER = 1,0,-1
+
+    def narrowing(self,alpha,beta):
+        if self.bound == self.BOUND_LOWER: # was entry.score >= beta
+            alpha = max(alpha,self.score)
+        elif self.bound == self.BOUND_UPPER: # was entry.score <= alpha
+            beta = min(beta,self.score)
+        return alpha,beta
+
+    def isexact(self):
+        return self.bound == self.BOUND_EXACT
+
+
+class AlphaBeta(Engine):
+    """alpha-beta is negamax with pruning and transposition table
+
+    * has moves prioritization - :meth:`AlphaBeta.sorted_gen_moves`
+    * has iterative deepening - :meth:`AlphaBeta.search`
+    * has show analysis - :meth:`AlphaBeta.show`
+
+    """
+
+    MAXDEPTH = 5
+
+    def __init__(
+            self,
+            maxdepth = MAXDEPTH,
+            policy = SunfishPolicy()):
+        super(AlphaBeta,self).__init__()
+        self.maxdepth = maxdepth
+        self.policy = policy
+        self.upper = self.policy.upper
+        self.showsearch = True
+
+    def sorted_gen_moves(self,pos):
+        """
+
+        >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
+        >>> q2 = Superposition(*tools.parseFEN(FEN_MATE0))
+        >>> a = AlphaBeta()
+        >>> moves = a.sorted_gen_moves(q2)
+        >>> list(moves)
+        [(91, 82), (91, 92), (91, 81)]
+        >>> scores = list(q2.move(move).score for move in moves)
+        >>> scores[0] < scores[1] < scores[2]
+        True
+
+        """
+        scoremoves = sorted(
+            (self.policy.eval(pos.move(move)),move)
+            for move in pos.gen_moves())
+        return OrderedDict(scoremoves).values()
+
+    def negamax(self,pos,depth,alpha,beta):
+        alpha_o = alpha
+        entry = self.tt.get(pos) # default=None
+        if entry is not None and entry.depth >= depth:
+            self.hits += 1
+            alpha,beta = entry.narrowing(alpha,beta)
+            if alpha >= beta or entry.isexact():
+                return entry.branch,entry.score
+        if pos.gameover():
+            return [None,],self.policy.eval(pos)
+        if depth == 0:
+            return [],self.policy.eval(pos)
+        bestbranch,maxscore = [],-self.upper
+        for move in self.sorted_gen_moves(pos):
+            nextpos = pos.move(move)
+            branch,score = self.negamax(nextpos,depth-1,-beta,-alpha)
+            score = -score # nega
+            if score >= maxscore:
+                bestbranch,maxscore = [move,]+branch,score
+                alpha = max(alpha,score)
+                if alpha >= beta: break # pruning
+        self.tt[pos] = Entry(
+            depth,maxscore,bestbranch,
+            (maxscore >= beta)-(maxscore <= alpha_o))
+        return bestbranch,maxscore
+
+    def show(self,pos,timespent,depth):
+        if not self.showsearch:
+            return
+        best = self.tt.get(pos)
+        if best is None:
+            return
+        if depth == 1:
+            print()
+        print('${} {}ms {}/{} {} {}'.format(
+            depth,int(timespent*1000),
+            self.hits,len(self.tt.od),
+            best.score,best.branch))
+
+    def search(self,pos,secs=NotImplemented):
+        timestart = time.time()
+        for depth in range(1,self.maxdepth+1):
+            self.tt,self.hits = LRUCache(TABLE_SIZE),0
+            bestbranch,bestscore = self.negamax(
+                pos,depth,-self.upper,self.upper)
+            timespent = time.time() - timestart
+            self.show(pos,timespent,depth)
+            if None in bestbranch:
+                break
+        return pos.legal(bestbranch[0]),bestscore
+
+
 enginedict = dict(
     Sunfish=Sunfish,
     Fool=Fool,
     Minimax=Minimax,
     Negamax=Negamax,
+    AlphaBeta=AlphaBeta,
     )
 
 
 if __name__ == '__main__':
 
-    import sys
+    import sys, os
     import doctest
-    print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-    scripts = doctest.script_from_examples(__doc__)
 
-    if sys.argv[0] != "":
+    if sys.argv[0] == "":
+        print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
+        scripts = doctest.script_from_examples(__doc__)
+    else:
         if len(sys.argv) == 3:
             white = enginedict[sys.argv[1]]()
             black = enginedict[sys.argv[2]]()
