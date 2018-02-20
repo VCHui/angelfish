@@ -25,6 +25,8 @@
   ... '........',
   ... ]
 
+  >>> m.nodes,m.showsearch = 0,0
+  >>> n.nodes,n.showsearch = 0,0
   >>> mbest = m.maximize(q5,m.maxdepth)
   >>> mbest == n.negamax(q5,n.maxdepth,-n.upper,n.upper)
   True
@@ -52,10 +54,10 @@
 
 * AlphaBeta and Negamax should produce the same outcomes for `q5`
 
-  >>> a = AlphaBeta(maxdepth=11)
+  >>> a = AlphaBeta()
+  >>> a.showsearch = 0
   >>> a
-  AlphaBeta.SunfishPolicy.maxdepth11
-  >>> a.showsearch = False
+  AlphaBeta.SunfishPolicy.maxdepth15
   >>> assert a.search(q5) == (bestmove,bestscore)
   >>> abest = a.tt.get(q5)
   >>> assert abest.score == bestscore
@@ -128,7 +130,8 @@ class Superposition(Position):
         return pos
 
     def gameover(self):
-        return "K" not in self.board or "k" not in self.board
+        # return "K" not in self.board or "k" not in self.board
+        return "K" not in self.board # "k" was captured on last ply;
 
     def legal(self,move):
         """return `move` if not ignore check else None;"""
@@ -138,9 +141,29 @@ class Superposition(Position):
             return move
         return None
 
-    def print(self):
-        print_pos(self)
+    def print(self,variation=[]):
+        """pretty print the chessboard or chessboards for `variation`;"""
+        pos = self
+        print_pos(pos)
+        for move in variation:
+            if move is None:
+                break
+            pos = pos.move(move)
+            print_pos(pos)
 
+    def mrender(self,move):
+        """return the algebraic notation for `move` or `variation`;"""
+        if isinstance(move,tuple):
+            return tools.mrender(self,move)
+        variation = move
+        pos,moves = self,[]
+        for move in variation:
+            if move is None:
+                moves.append(None)
+                break
+            moves.append(tools.mrender(pos,move))
+            pos = pos.move(move)
+        return moves
 
 def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     """return a generator of moves of a game;"""
@@ -153,7 +176,7 @@ def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
             break
         if pos.legal(move) is None:
             print('{} {} not illegal!'.format(
-                engine,tools.mrender(pos,move)))
+                engine,pos.mrender(move)))
             break
         yield ply,pos,move,score
         pos = pos.move(move)
@@ -168,8 +191,8 @@ def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
             pos.print()
             print(tools.renderFEN(pos))
             print("\a") # bell
-            print(ply+1,end=":")
-        print("",tools.mrender(pos,move),end="")
+            print(ply//2+1,end=":")
+        print("",pos.mrender(move),end="")
     print("#")
     return pos
 
@@ -243,8 +266,49 @@ class Sunfish(Searcher,Engine):
 
     """
 
-    def __init__(self):
+    def __init__(self,showsearch=1):
         super(Sunfish,self).__init__()
+        self.showsearch = showsearch
+
+    def search(self,pos,secs=1):
+        """Override :meth:`Searcher.search` to perform `go` as in `xboard`"""
+        timestart = time.time()
+        for _ in self._search(pos):
+            timespent = time.time() - timestart
+            if self.showsearch:
+                self.show(pos,self.depth,timespent)
+            if timespent > secs:
+                break
+        entry = self.tp_score.get((pos,self.depth,True))
+        return self.tp_move.get(pos),entry.lower
+
+    def show(self,pos,depth,timespent):
+        entry = self.tp_score.get((pos,depth,True))
+        pv = ",".join(pos.mrender(self.getpv(pos)))
+        if depth == 1:
+            print()
+        print('${} {}ms {}/{} {}: {}'.format(
+            depth,int(timespent*1000),
+            self.nodes,len(self.tp_move.od),
+            entry.lower,pv))
+
+    def getpv(self,pos):
+        """return `pv` from `pos` using :attr:`tp_move`
+
+        - a simplified re-implementation of :func:`tools.pv`
+
+        """
+        pv = OrderedDict()
+        while True:
+            move = self.tp_move.get(pos)
+            if move is None:
+                break
+            pos = pos.move(move)
+            if pos in pv:
+                raise Warning((move,'loop'))
+                break
+            pv[pos] = move
+        return list(pv.values())
 
 
 class Fool(Engine):
@@ -271,18 +335,21 @@ class Minimax(Engine):
 
     """
 
-    MAXDEPTH = 3
+    MAXDEPTH = 4
 
     def __init__(
             self,
             maxdepth = MAXDEPTH,
-            policy = SunfishPolicy()):
+            policy = SunfishPolicy(),
+            showsearch = 1):
         super(Minimax,self).__init__()
         self.maxdepth = maxdepth
         self.policy = policy
         self.upper = self.policy.upper
+        self.showsearch = showsearch
 
     def maximize(self,pos,depth):
+        self.nodes += 1
         if pos.gameover():
             return [None,],self.policy.eval(pos)
         if depth == 0:
@@ -296,8 +363,9 @@ class Minimax(Engine):
         return bestbranch,maxscore
 
     def minimize(self,pos,depth):
-        # sunfish convention puts the curent player white
+        # sunfish convention puts the current player white
         # black requires score sign reversion
+        self.nodes += 1
         if pos.gameover():
             return [None,],-self.policy.eval(pos)
         if depth == 0:
@@ -311,9 +379,15 @@ class Minimax(Engine):
         return bestbranch,minscore
 
     def search(self,pos,secs=NotImplemented):
+        self.nodes = 0
         timestart = time.time()
         bestbranch,bestscore = self.maximize(pos,self.maxdepth)
         timespent = time.time() - timestart
+        if self.showsearch:
+            print()
+            print('${} {}ms {} {}: {}'.format(
+                self.maxdepth,int(timespent*1000),
+                self.nodes,bestscore,pos.mrender(bestbranch)))
         return pos.legal(bestbranch[0]),bestscore
 
 
@@ -322,18 +396,21 @@ class Negamax(Engine):
 
     """
 
-    MAXDEPTH = 3
+    MAXDEPTH = 4
 
     def __init__(
             self,
             maxdepth = MAXDEPTH,
-            policy = SunfishPolicy()):
+            policy = SunfishPolicy(),
+            showsearch = 1):
         super(Negamax,self).__init__()
         self.maxdepth = maxdepth
         self.policy = policy
         self.upper = self.policy.upper
+        self.showsearch = showsearch
 
     def negamax(self,pos,depth,alpha,beta):
+        self.nodes += 1
         if pos.gameover():
             return [None,],self.policy.eval(pos)
         if depth == 0:
@@ -349,10 +426,16 @@ class Negamax(Engine):
         return bestbranch,maxscore
 
     def search(self,pos,secs=NotImplemented):
+        self.nodes = 0
         timestart = time.time()
         bestbranch,bestscore = self.negamax(
             pos,self.maxdepth,-self.upper,self.upper)
         timespent = time.time() - timestart
+        if self.showsearch:
+            print()
+            print('${} {}ms {} {}: {}'.format(
+                self.maxdepth,int(timespent*1000),
+                self.nodes,bestscore,pos.mrender(bestbranch)))
         return pos.legal(bestbranch[0]),bestscore
 
 
@@ -392,25 +475,32 @@ class AlphaBeta(Engine):
 
     """
 
-    MAXDEPTH = 5
+    MAXDEPTH = 15
 
     def __init__(
             self,
             maxdepth = MAXDEPTH,
-            policy = SunfishPolicy()):
+            policy = SunfishPolicy(),
+            showsearch = 1):
         super(AlphaBeta,self).__init__()
         self.maxdepth = maxdepth
         self.policy = policy
         self.upper = self.policy.upper
-        self.showsearch = True
+        self.showsearch = showsearch
 
     def sorted_gen_moves(self,pos):
-        """
+        """return `moves` in ascending order of the next move scores
+
+        * ascending scores for the next player is equivalent to
+          descending value for moves of the current player;
 
         >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
         >>> q2 = Superposition(*tools.parseFEN(FEN_MATE0))
+        >>> q2.board.find("K"), q2.board.find("q")
+        (91, 82)
         >>> a = AlphaBeta()
         >>> moves = a.sorted_gen_moves(q2)
+
         >>> list(moves)
         [(91, 82), (91, 92), (91, 81)]
         >>> scores = list(q2.move(move).score for move in moves)
@@ -424,6 +514,7 @@ class AlphaBeta(Engine):
         return OrderedDict(scoremoves).values()
 
     def negamax(self,pos,depth,alpha,beta):
+        self.nodes += 1
         alpha_o = alpha
         entry = self.tt.get(pos) # default=None
         if entry is not None and entry.depth >= depth:
@@ -449,30 +540,31 @@ class AlphaBeta(Engine):
             (maxscore >= beta)-(maxscore <= alpha_o))
         return bestbranch,maxscore
 
-    def show(self,pos,timespent,depth):
-        if not self.showsearch:
-            return
-        best = self.tt.get(pos)
-        if best is None:
-            return
-        if depth == 1:
-            print()
-        print('${} {}ms {}/{} {} {}'.format(
-            depth,int(timespent*1000),
-            self.hits,len(self.tt.od),
-            best.score,best.branch))
-
-    def search(self,pos,secs=NotImplemented):
+    def search(self,pos,secs=60):
         timestart = time.time()
+        self.nodes = 0
         for depth in range(1,self.maxdepth+1):
-            self.tt,self.hits = LRUCache(TABLE_SIZE),0
+            self.tt,self.hits = LRUCache(TABLE_SIZE),0 # transposition table
             bestbranch,bestscore = self.negamax(
                 pos,depth,-self.upper,self.upper)
             timespent = time.time() - timestart
-            self.show(pos,timespent,depth)
-            if None in bestbranch:
+            if self.showsearch:
+                self.show(pos,timespent,depth)
+            if (timespent > secs) or (bestbranch[-1]) is None:
                 break
         return pos.legal(bestbranch[0]),bestscore
+
+    def show(self,pos,timespent,depth):
+        best = self.tt.get(pos)
+        if best is None:
+            return
+        pv = ",".join(pos.mrender(best.branch))
+        if depth == 1:
+            print()
+        print('${} {}ms {}/{}/{} {}: {}'.format(
+            depth,int(timespent*1000),
+            self.hits,len(self.tt.od),self.nodes,
+            best.score,pv))
 
 
 enginedict = dict(
@@ -489,9 +581,11 @@ if __name__ == '__main__':
     import sys, os
     import doctest
 
+    docscript = lambda obj=None: doctest.script_from_examples(
+        __doc__ if obj is None else getattr(obj,'__doc__'))
+
     if sys.argv[0] == "":
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-        scripts = doctest.script_from_examples(__doc__)
     else:
         if len(sys.argv) == 3:
             white = enginedict[sys.argv[1]]()
