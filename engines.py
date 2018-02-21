@@ -5,10 +5,10 @@
 
 * Negamax and Minimax are equivalent
 
-  >>> m = Minimax(maxdepth=5)
+  >>> m = Minimax(maxdepth=5,showsearch=0)
   >>> m
   Minimax.SunfishPolicy.maxdepth5
-  >>> n = Negamax(maxdepth=5)
+  >>> n = Negamax(maxdepth=5,showsearch=0)
   >>> n
   Negamax.SunfishPolicy.maxdepth5
 
@@ -25,43 +25,32 @@
   ... '........',
   ... ]
 
-  >>> m.nodes,m.showsearch = 0,0
-  >>> n.nodes,n.showsearch = 0,0
-  >>> mbest = m.maximize(q5,m.maxdepth)
-  >>> mbest == n.negamax(q5,n.maxdepth,-n.upper,n.upper)
+  >>> m.nodes = 0 # init search
+  >>> pv_m,score_m = m.maximize(q5,m.maxdepth)
+
+  >>> n.nodes = 0 # init search
+  >>> pv_n,score_n = n.negamax(q5,n.maxdepth,-n.upper,n.upper)
+
+  >>> (pv_n,score_n) == (pv_m,score_m)
   True
-  >>> bestbranch,bestscore = mbest
-  >>> bestscore > MATE_LOWER
-  True
-  >>> len(bestbranch) == 5+1 and bestbranch[-1] == None
-  True
-  >>> q = q5
-  >>> for move in bestbranch[:-1]:
-  ...    q = q.move(move)
-  >>> 'K' in q.board
-  False
-  >>> bestmove = bestbranch[0]
-  >>> assert q5.move(bestmove).board.split() == [
-  ... '........',
-  ... '........',
-  ... '........',
-  ... '........',
-  ... '.......r',
-  ... '.....k..',
-  ... '........',
-  ... '......K.',
-  ... ]
 
 * AlphaBeta and Negamax should produce the same outcomes for `q5`
 
-  >>> a = AlphaBeta()
-  >>> a.showsearch = 0
+  >>> a = AlphaBeta(showsearch=0)
   >>> a
   AlphaBeta.SunfishPolicy.maxdepth15
-  >>> assert a.search(q5) == (bestmove,bestscore)
-  >>> abest = a.tt.get(q5)
-  >>> assert abest.score == bestscore
-  >>> assert abest.branch == bestbranch
+  >>> _,score_a = a.search(q5,secs=5)
+  >>> pv_a = a.getpv(q5)
+  >>> (pv_a,score_a) == (pv_m,score_m)
+  True
+
+  >>> s = Sunfish(showsearch=0)
+  >>> s
+  Sunfish
+  >>> _,score_s = s.search(q5,secs=5)
+  >>> pv_s = s.getpv(q5)
+  >>> pv_s == pv_m[:len(pv_s)]
+  True
 
 """
 
@@ -159,7 +148,7 @@ class Superposition(Position):
         pos,moves = self,[]
         for move in variation:
             if move is None:
-                moves.append(None)
+                moves[-1] += "#"
                 break
             moves.append(tools.mrender(pos,move))
             pos = pos.move(move)
@@ -499,9 +488,9 @@ class AlphaBeta(Engine):
         >>> q2.board.find("K"), q2.board.find("q")
         (91, 82)
         >>> a = AlphaBeta()
-        >>> moves = a.sorted_gen_moves(q2)
+        >>> moves = list(a.sorted_gen_moves(q2))
 
-        >>> list(moves)
+        >>> moves
         [(91, 82), (91, 92), (91, 81)]
         >>> scores = list(q2.move(move).score for move in moves)
         >>> scores[0] < scores[1] < scores[2]
@@ -511,7 +500,7 @@ class AlphaBeta(Engine):
         scoremoves = sorted(
             (self.policy.eval(pos.move(move)),move)
             for move in pos.gen_moves())
-        return OrderedDict(scoremoves).values()
+        return (move for score,move in scoremoves)
 
     def negamax(self,pos,depth,alpha,beta):
         self.nodes += 1
@@ -565,6 +554,10 @@ class AlphaBeta(Engine):
             depth,int(timespent*1000),
             self.hits,len(self.tt.od),self.nodes,
             best.score,pv))
+
+    def getpv(self,pos):
+        best = self.tt.get(pos)
+        return None if best is None else best.branch
 
 
 enginedict = dict(
