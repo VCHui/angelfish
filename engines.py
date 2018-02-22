@@ -293,8 +293,7 @@ class Sunfish(Searcher,Engine):
             if move is None:
                 break
             if pos in pv:
-                raise Warning((move,'loop'))
-                break
+                return list(pv.values()) + [move,] # loop
             pv[pos] = move
             pos = pos.move(move)
         return list(pv.values())
