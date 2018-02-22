@@ -364,7 +364,7 @@ class Minimax(Engine):
             nextpos = pos.move(move)
             v,score = self.maximize(nextpos,depth-1)
             if score <= minscore:
-                pv,minscore = [move,]+pv,score
+                pv,minscore = [move,]+v,score
         return pv,minscore
 
     def search(self,pos,secs=NotImplemented):
