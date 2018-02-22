@@ -130,23 +130,23 @@ class Superposition(Position):
             return move
         return None
 
-    def print(self,variation=[]):
-        """pretty print the chessboard or chessboards for `variation`;"""
+    def print(self,v=[]):
+        """pretty print the chessboard or chessboards for variation `v`;"""
         pos = self
         print_pos(pos)
-        for move in variation:
+        for move in v:
             if move is None:
                 break
             pos = pos.move(move)
             print_pos(pos)
 
     def mrender(self,move):
-        """return the algebraic notation for `move` or `variation`;"""
+        """return the algebraic notation for `move` or variation `v`;"""
         if isinstance(move,tuple):
             return tools.mrender(self,move)
-        variation = move
+        v = move
         pos,moves = self,[]
-        for move in variation:
+        for move in v:
             if move is None:
                 moves[-1] += "#"
                 break
@@ -343,13 +343,13 @@ class Minimax(Engine):
             return [None,],self.policy.eval(pos)
         if depth == 0:
             return [],self.policy.eval(pos)
-        bestbranch,maxscore = [],-self.upper
+        pv,maxscore = [],-self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            branch,score = self.minimize(nextpos,depth-1)
+            v,score = self.minimize(nextpos,depth-1)
             if score >= maxscore:
-                bestbranch,maxscore = [move,]+branch,score
-        return bestbranch,maxscore
+                pv,maxscore = [move,]+v,score
+        return pv,maxscore
 
     def minimize(self,pos,depth):
         # sunfish convention puts the current player white
@@ -359,25 +359,25 @@ class Minimax(Engine):
             return [None,],-self.policy.eval(pos)
         if depth == 0:
             return [],-self.policy.eval(pos)
-        bestbranch,minscore = [],self.upper
+        pv,minscore = [],self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            branch,score = self.maximize(nextpos,depth-1)
+            v,score = self.maximize(nextpos,depth-1)
             if score <= minscore:
-                bestbranch,minscore = [move,]+branch,score
-        return bestbranch,minscore
+                pv,minscore = [move,]+pv,score
+        return pv,minscore
 
     def search(self,pos,secs=NotImplemented):
         self.nodes = 0
         timestart = time.time()
-        bestbranch,bestscore = self.maximize(pos,self.maxdepth)
+        pv,bestscore = self.maximize(pos,self.maxdepth)
         timespent = time.time() - timestart
         if self.showsearch:
             print()
             print('${} {}ms {} {}: {}'.format(
                 self.maxdepth,int(timespent*1000),
-                self.nodes,bestscore,pos.mrender(bestbranch)))
-        return pos.legal(bestbranch[0]),bestscore
+                self.nodes,bestscore,pos.mrender(pv)))
+        return pos.legal(pv[0]),bestscore
 
 
 class Negamax(Engine):
@@ -404,31 +404,30 @@ class Negamax(Engine):
             return [None,],self.policy.eval(pos)
         if depth == 0:
             return [],self.policy.eval(pos)
-        bestbranch,maxscore = [],-self.upper
+        pv,maxscore = [],-self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            branch,score = self.negamax(nextpos,depth-1,-beta,-alpha)
+            v,score = self.negamax(nextpos,depth-1,-beta,-alpha)
             score = -score # nega
             if score >= maxscore:
-                bestbranch,maxscore = [move,]+branch,score
+                pv,maxscore = [move,]+v,score
                 alpha = max(alpha,score)
-        return bestbranch,maxscore
+        return pv,maxscore
 
     def search(self,pos,secs=NotImplemented):
         self.nodes = 0
         timestart = time.time()
-        bestbranch,bestscore = self.negamax(
-            pos,self.maxdepth,-self.upper,self.upper)
+        pv,bestscore = self.negamax(pos,self.maxdepth,-self.upper,self.upper)
         timespent = time.time() - timestart
         if self.showsearch:
             print()
             print('${} {}ms {} {}: {}'.format(
                 self.maxdepth,int(timespent*1000),
-                self.nodes,bestscore,pos.mrender(bestbranch)))
-        return pos.legal(bestbranch[0]),bestscore
+                self.nodes,bestscore,pos.mrender(pv)))
+        return pos.legal(pv[0]),bestscore
 
 
-class Entry(namedtuple('Entry',['depth','score','branch','bound'])):
+class Entry(namedtuple('Entry',['depth','score','pv','bound'])):
     """create :obj:`Entry` for the transposition table:
 
     >>> alpha_o,beta_o = -1,1
@@ -510,44 +509,43 @@ class AlphaBeta(Engine):
             self.hits += 1
             alpha,beta = entry.narrowing(alpha,beta)
             if alpha >= beta or entry.isexact():
-                return entry.branch,entry.score
+                return entry.pv,entry.score
         if pos.gameover():
             return [None,],self.policy.eval(pos)
         if depth == 0:
             return [],self.policy.eval(pos)
-        bestbranch,maxscore = [],-self.upper
+        pv,maxscore = [],-self.upper
         for move in self.sorted_gen_moves(pos):
             nextpos = pos.move(move)
-            branch,score = self.negamax(nextpos,depth-1,-beta,-alpha)
+            v,score = self.negamax(nextpos,depth-1,-beta,-alpha)
             score = -score # nega
             if score >= maxscore:
-                bestbranch,maxscore = [move,]+branch,score
+                pv,maxscore = [move,]+v,score
                 alpha = max(alpha,score)
                 if alpha >= beta: break # pruning
         self.tt[pos] = Entry(
-            depth,maxscore,bestbranch,
+            depth,maxscore,pv,
             (maxscore >= beta)-(maxscore <= alpha_o))
-        return bestbranch,maxscore
+        return pv,maxscore
 
     def search(self,pos,secs=60):
         timestart = time.time()
         self.nodes = 0
         for depth in range(1,self.maxdepth+1):
             self.tt,self.hits = LRUCache(TABLE_SIZE),0 # transposition table
-            bestbranch,bestscore = self.negamax(
-                pos,depth,-self.upper,self.upper)
+            pv,bestscore = self.negamax(pos,depth,-self.upper,self.upper)
             timespent = time.time() - timestart
             if self.showsearch:
                 self.show(pos,timespent,depth)
-            if (timespent > secs) or (bestbranch[-1]) is None:
+            if (timespent > secs) or (pv[-1]) is None:
                 break
-        return pos.legal(bestbranch[0]),bestscore
+        return pos.legal(pv[0]),bestscore
 
     def show(self,pos,timespent,depth):
         best = self.tt.get(pos)
         if best is None:
             return
-        pv = ",".join(pos.mrender(best.branch))
+        pv = ",".join(pos.mrender(best.pv))
         if depth == 1:
             print()
         print('${} {}ms {}/{}/{} {}: {}'.format(
@@ -557,7 +555,7 @@ class AlphaBeta(Engine):
 
     def getpv(self,pos):
         best = self.tt.get(pos)
-        return None if best is None else best.branch
+        return None if best is None else best.pv
 
 
 enginedict = dict(
