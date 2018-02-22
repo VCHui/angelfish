@@ -292,11 +292,11 @@ class Sunfish(Searcher,Engine):
             move = self.tp_move.get(pos)
             if move is None:
                 break
-            pos = pos.move(move)
             if pos in pv:
                 raise Warning((move,'loop'))
                 break
             pv[pos] = move
+            pos = pos.move(move)
         return list(pv.values())
 
 
