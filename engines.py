@@ -426,7 +426,7 @@ class Negamax(Engine):
         return pos.legal(pv[0]),bestscore
 
 
-class Entry(namedtuple('Entry',['depth','score','pv','bound'])):
+class Entry(namedtuple('Entry',['depth','score','move','bound'])):
     """create :obj:`Entry` for the transposition table:
 
     >>> alpha_o,beta_o = -1,1
@@ -508,43 +508,40 @@ class AlphaBeta(Engine):
             self.hits += 1
             alpha,beta = entry.narrowing(alpha,beta)
             if alpha >= beta or entry.isexact():
-                return entry.pv,entry.score
-        if pos.gameover():
-            return [None,],self.policy.eval(pos)
-        if depth == 0:
-            return [],self.policy.eval(pos)
-        pv,maxscore = [],-self.upper
+                return entry.score
+        if pos.gameover() or depth == 0:
+            return self.policy.eval(pos)
+        bestmove,maxscore = None,-self.upper
         for move in self.sorted_gen_moves(pos):
             nextpos = pos.move(move)
-            v,score = self.negamax(nextpos,depth-1,-beta,-alpha)
-            score = -score # nega
+            score = -self.negamax(nextpos,depth-1,-beta,-alpha)
             if score >= maxscore:
-                pv,maxscore = [move,]+v,score
+                bestmove,maxscore = move,score
                 alpha = max(alpha,score)
                 if alpha >= beta: break # pruning
         self.tt[pos] = Entry(
-            depth,maxscore,pv,
+            depth,maxscore,bestmove,
             (maxscore >= beta)-(maxscore <= alpha_o))
-        return pv,maxscore
+        return maxscore
 
     def search(self,pos,secs=60):
         timestart = time.time()
         self.nodes = 0
         for depth in range(1,self.maxdepth+1):
             self.tt,self.hits = LRUCache(TABLE_SIZE),0 # transposition table
-            pv,bestscore = self.negamax(pos,depth,-self.upper,self.upper)
+            bestscore = self.negamax(pos,depth,-self.upper,self.upper)
+            pv = self.getpv(pos)
             timespent = time.time() - timestart
             if self.showsearch:
                 self.show(pos,timespent,depth)
-            if (timespent > secs) or (pv[-1]) is None:
+            if (timespent > secs) or (pv[-1] is None):
                 break
         return pos.legal(pv[0]),bestscore
 
     def show(self,pos,timespent,depth):
         best = self.tt.get(pos)
-        if best is None:
-            return
-        pv = ",".join(pos.mrender(best.pv))
+        pv = self.getpv(pos)
+        pv = ",".join(pos.mrender(pv))
         if depth == 1:
             print()
         print('${} {}ms {}/{}/{} {}: {}'.format(
@@ -553,8 +550,21 @@ class AlphaBeta(Engine):
             best.score,pv))
 
     def getpv(self,pos):
-        best = self.tt.get(pos)
-        return None if best is None else best.pv
+        pv = OrderedDict()
+        while True:
+            if pos.gameover():
+                pv[pos] = None
+                break
+            entry = self.tt.get(pos)
+            if entry is None:
+                break
+            if entry.move is None:
+                break
+            if pos in pv:
+                return list(pv.values()) + [entry.move,]
+            pv[pos] = entry.move
+            pos = pos.move(entry.move)
+        return list(pv.values())
 
 
 enginedict = dict(
