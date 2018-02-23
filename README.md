@@ -2,10 +2,13 @@
 Some exercise implementations of chess engines using the very neat [sunfish](https://github.com/thomasahle/sunfish) as a framework
 
 ## Engines implemented
+In order of increasing performance:
 * Minimax
 * Negamax
 * AlphaBeta - with pruning and transposition table
 * Sunfish - refitting as a mixin
+
+All engines have a method `search(pos,secs)` as in class `sunfish.Search`
 
 ## Framework
 * Decouple `sunfish.Position` into move handlings and score evaluations separately
@@ -17,6 +20,9 @@ Some exercise implementations of chess engines using the very neat [sunfish](htt
   - A new `SunfishPolicy` class to handle heuristic evaluation of `position` in engines
     * abstraction of `sunfish.Position.score` and `sunfish.Position.value`
     * the base class adopted `sunfish.pst` scores
+
+## A screenshot
+![screenshot](https://github.com/VC-H/angelfish/blob/master/screenshot.png?raw=true)
 
 ## `python3` only, or `pypy3`
 
