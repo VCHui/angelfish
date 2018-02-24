@@ -1,5 +1,5 @@
 # angelfish
-Some exercise implementations of chess engines using the very neat [sunfish](https://github.com/thomasahle/sunfish) as a framework
+Some exercise implementations of chess engines using the very nice [sunfish](https://github.com/thomasahle/sunfish) framework and tools
 
 ## Engines implemented
 In order of increasing performance:
