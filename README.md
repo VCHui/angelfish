@@ -5,7 +5,7 @@ Some exercise implementations of chess engines using the very nice [sunfish](htt
 In order of increasing performance:
 * Minimax
 * Negamax
-* AlphaBeta - with pruning and transposition table
+* AlphaBeta - with pruning, transposition table and iterative deepening
 * Sunfish - refitting as a mixin
 
 All engines have a method `search(pos,secs)` as in class `sunfish.Search`
