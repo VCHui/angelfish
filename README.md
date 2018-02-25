@@ -33,6 +33,6 @@ All engines have a method `search(pos,secs)` as in class `sunfish.Search`
 git clone --recursive https://github.com/VC-H/angelfish.git
 ```
 
-## anglefish
+## angelfish
 * Distant relatives of sunfish
 * Refer to a class of fresh water aquarium fish for appreciation
