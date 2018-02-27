@@ -44,6 +44,18 @@
   >>> (pv_a,score_a) == (pv_m,score_m)
   True
 
+* AlphaBeta without pruning
+
+  >>> b = AlphaBeta(showsearch=0,pruning=False)
+  >>> b
+  AlphaBeta.SunfishPolicy.maxdepth15
+  >>> _,score_b = b.search(q5,secs=5)
+  >>> pv_b = b.getpv(q5)
+  >>> (pv_b,score_b) == (pv_m,score_m)
+  True
+
+* Sunfish mixin refit
+
   >>> s = Sunfish(showsearch=0)
   >>> s
   Sunfish
@@ -51,6 +63,7 @@
   >>> pv_s = s.getpv(q5)
   >>> pv_s == pv_m[:len(pv_s)]
   True
+
 
 """
 
@@ -468,12 +481,14 @@ class AlphaBeta(Engine):
             self,
             maxdepth = MAXDEPTH,
             policy = SunfishPolicy(),
-            showsearch = 1):
+            showsearch = 1,
+            pruning = True):
         super(AlphaBeta,self).__init__()
         self.maxdepth = maxdepth
         self.policy = policy
         self.upper = self.policy.upper
         self.showsearch = showsearch
+        self.pruning = pruning
 
     def sorted_gen_moves(self,pos):
         """return `moves` in ascending order of the next move scores
@@ -512,13 +527,15 @@ class AlphaBeta(Engine):
         if pos.gameover() or depth == 0:
             return self.policy.eval(pos)
         bestmove,maxscore = None,-self.upper
-        for move in self.sorted_gen_moves(pos):
+        moves = (self.sorted_gen_moves(pos) if self.pruning else
+                     pos.gen_moves())
+        for move in moves:
             nextpos = pos.move(move)
             score = -self.negamax(nextpos,depth-1,-beta,-alpha)
             if score >= maxscore:
                 bestmove,maxscore = move,score
                 alpha = max(alpha,score)
-                if alpha >= beta: break # pruning
+                if self.pruning and alpha >= beta: break # pruning
         self.tt[pos] = Entry(
             depth,maxscore,bestmove,
             (maxscore >= beta)-(maxscore <= alpha_o))
