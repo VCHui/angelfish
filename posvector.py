@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from sunfish import tools
-from engines import legal
 import numpy as np
 
 
