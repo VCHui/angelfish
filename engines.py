@@ -127,8 +127,9 @@ class Superposition(Position):
         return Superposition(*super().nullmove())
 
     def move(self,move):
+        capture = self.board[move[-1]]
         pos = Superposition(*super().move(move))
-        pos.move_from = move
+        pos.capture = capture
         return pos
 
     def gameover(self):
@@ -260,6 +261,8 @@ class Engine(object):
             name += "." + self.policy.__class__.__name__
         if hasattr(self,'maxdepth'):
             name += ".maxdepth" + str(self.maxdepth)
+        if hasattr(self,'maxrecur'):
+            name += ".maxrecur" + str(self.maxrecur)
         return name
 
 
@@ -469,22 +472,28 @@ class Entry(namedtuple('Entry',['depth','score','move','bound'])):
 class AlphaBeta(Engine):
     """alpha-beta is negamax with pruning and transposition table
 
-    * has moves prioritization - :meth:`AlphaBeta.sorted_gen_moves`
-    * has iterative deepening - :meth:`AlphaBeta.search`
-    * has show analysis - :meth:`AlphaBeta.show`
+    * has moves prioritization - :meth:`sorted_gen_moves`
+    * has iterative deepening - :meth:`search`
+    * quiescence search - :meth:`negamax`
+      - terminates only if no capture or MAXRECUR reached beyound MAXDEPTH
+      - MAXRECUR = 0 to disable quiescene search (default)
+    * has show analysis - :meth:`show`
 
     """
 
     MAXDEPTH = 15
+    MAXRECUR = 30
 
     def __init__(
             self,
             maxdepth = MAXDEPTH,
+            maxrecur = 0, # quiescence search disabled
             policy = SunfishPolicy(),
             showsearch = 1,
             pruning = True):
         super(AlphaBeta,self).__init__()
         self.maxdepth = maxdepth
+        self.maxrecur = maxrecur
         self.policy = policy
         self.upper = self.policy.upper
         self.showsearch = showsearch
@@ -524,7 +533,10 @@ class AlphaBeta(Engine):
             alpha,beta = entry.narrowing(alpha,beta)
             if alpha >= beta or entry.isexact():
                 return entry.score
-        if pos.gameover() or depth == 0:
+        if (pos.gameover() or
+            (depth <= -self.maxrecur) or
+            (depth <= 0 and pos.capture == ".") # quiescence
+            ):
             return self.policy.eval(pos)
         bestmove,maxscore = None,-self.upper
         moves = (self.sorted_gen_moves(pos) if self.pruning else
@@ -584,7 +596,7 @@ class AlphaBeta(Engine):
         return list(pv.values())
 
 
-enginedict = dict(
+enginedict = OrderedDict(
     Sunfish=Sunfish,
     Fool=Fool,
     Minimax=Minimax,
