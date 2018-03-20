@@ -1,6 +1,3 @@
 [submodule "sunfish"]
 	path = sunfish
 	url = https://github.com/VC-H/sunfish.git
-[submodule "stockfish"]
-	path = stockfish
-	url = https://github.com/VC-H/Stockfish.git
