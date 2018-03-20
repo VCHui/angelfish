@@ -13,7 +13,7 @@
   Negamax.SunfishPolicy.maxdepth5
 
   >>> FEN_MATE5 = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
-  >>> q5 = Superposition(*tools.parseFEN(FEN_MATE5))
+  >>> q5 = Superposition.init(FEN_MATE5)
   >>> assert q5.board.split() == [
   ... '.k......',
   ... '........',
@@ -38,7 +38,7 @@
 
   >>> a = AlphaBeta(showsearch=0)
   >>> a
-  AlphaBeta.SunfishPolicy.maxdepth15
+  AlphaBeta.SunfishPolicy.maxdepth15.maxrecur0
   >>> _,score_a = a.search(q5,secs=5)
   >>> pv_a = a.getpv(q5)
   >>> (pv_a,score_a) == (pv_m,score_m)
@@ -48,7 +48,7 @@
 
   >>> b = AlphaBeta(showsearch=0,pruning=False)
   >>> b
-  AlphaBeta.SunfishPolicy.maxdepth15
+  AlphaBeta.SunfishPolicy.maxdepth15.maxrecur0
   >>> _,score_b = b.search(q5,secs=5)
   >>> pv_b = b.getpv(q5)
   >>> (pv_b,score_b) == (pv_m,score_m)
@@ -77,17 +77,31 @@ import random
 
 
 class Superposition(Position):
-    """Extended Position class:
+    """:class:`sunfish.Position` extended
 
-    * meth:`rotate`, meth:`nullmove`, and
-      meth:`move` return Superposition instances;
+    * wrap :meth:`rotate`, :meth:`nullmove`, and
+      :meth:`move` to return a Superposition instance;
 
-    * check move is legal independent of :attr:`score`;
+    * new methods added to :class:`sunfish.Position`:
 
-    * test compatibility with :class:`sunfish.Position`:
+      - :meth:`gameover`
+      - :meth:`legal`
 
+      *checks for gameover and legal are independent of :attr:`score`*
+
+    * re-integrate some functions of :mod:`tools`:
+
+      - :meth:`init` for :func:`sunfish.tools.parseFEN`
+      - :meth:`print` for :func:`sunfish.print_pos`
+      - :meth:`mrender` for :func:`sunfish.tools.mrender`
+      - :meth:`fen` for :func:`sunfish.tools.renderFEN`
+
+    * the followings tested compatibility with :class:`sunfish.Position`:
+
+      >>> q = Superposition.init(tools.FEN_INITIAL)
       >>> p0 = tools.parseFEN(tools.FEN_INITIAL)
       >>> q0 = Superposition(*p0)
+      >>> assert q0 == q
       >>> assert issubclass(Superposition,Position)
       >>> assert isinstance(q0,Superposition)
       >>> assert tuple(q0) == tuple(p0)
@@ -103,7 +117,7 @@ class Superposition(Position):
     * legal move tests
 
       >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
-      >>> q2 = Superposition(*tools.parseFEN(FEN_MATE0))
+      >>> q2 = Superposition.init(FEN_MATE0)
       >>> assert q2.board.split() == [ # *black plays "K"*
       ... '........',
       ... '........',
@@ -119,6 +133,14 @@ class Superposition(Position):
       True
 
     """
+
+    @classmethod
+    def init(this,fen):
+        return this(*tools.parseFEN(fen))
+
+    @property
+    def fen(self):
+        return tools.renderFEN(self)
 
     def rotate(self):
         return Superposition(*super().rotate())
@@ -168,9 +190,10 @@ class Superposition(Position):
             pos = pos.move(move)
         return moves
 
+
 def game(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
     """return a generator of moves of a game;"""
-    pos = Superposition(*tools.parseFEN(fen))
+    pos = Superposition.init(fen)
     engines = [white,black]
     for ply in range(plies):
         engine = engines[ply%2]
@@ -192,7 +215,7 @@ def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
         if ply%2 == 0:
             print()
             pos.print()
-            print(tools.renderFEN(pos))
+            print(pos.fen)
             print("\a") # bell
             print(ply//2+1,end=":")
         print("",pos.mrender(move),end="")
@@ -206,7 +229,7 @@ class SunfishPolicy(object):
     * use ``FEN_MATE0`` as in :class:`Superposition`
 
       >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
-      >>> q2 = Superposition(*tools.parseFEN(FEN_MATE0))
+      >>> q2 = Superposition.init(FEN_MATE0)
 
     * **board score is anti-symmetric**
 
@@ -506,7 +529,7 @@ class AlphaBeta(Engine):
           descending value for moves of the current player;
 
         >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
-        >>> q2 = Superposition(*tools.parseFEN(FEN_MATE0))
+        >>> q2 = Superposition.init(FEN_MATE0)
         >>> q2.board.find("K"), q2.board.find("q")
         (91, 82)
         >>> a = AlphaBeta()
@@ -613,7 +636,7 @@ if __name__ == '__main__':
     docscript = lambda obj=None: doctest.script_from_examples(
         __doc__ if obj is None else getattr(obj,'__doc__'))
 
-    if sys.argv[0] == "":
+    if sys.argv[0] == "": # if the python session is inside an emacs buffer
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
     else:
         if len(sys.argv) == 3:

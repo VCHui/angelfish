@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 
 from engines import Superposition,enginedict
-from sunfish import tools
 
 def matetests(engineclass,fensfilepath,secs):
     """a re-implementation of :func:`sunfish.test.allmate`"""
     with open(fensfilepath,"r") as f:
         for line in f:
             line = line.strip()
-            pos = Superposition(*tools.parseFEN(line))
+            pos = Superposition.init(line)
             engine = engineclass(showsearch=1)
             move,score = engine.search(pos,secs)
             print("!",line,"=",pos.mrender(move))
