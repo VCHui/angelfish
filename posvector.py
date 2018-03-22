@@ -5,17 +5,17 @@ from sunfish import tools
 import numpy as np
 
 
-piecetypes = 'PNBRQKpnbrqk'
-piecevalues = dict(zip("."+piecetypes,[0,1,2,3,4,5,6,-1,-2,-3,-4,-5,-6]))
+PIECETYPES = 'PNBRQKpnbrqk'
+PIECEVALUES = dict(zip("."+PIECETYPES,[0,1,2,3,4,5,6,-1,-2,-3,-4,-5,-6]))
 
 
-def prepr(pos):
+def prepr(pos,piecetypes=PIECETYPES):
     """encode `pos.board`, pieces on board, into a 12*64-element array:
 
     * concatenation of 64-element board representation for 12 `piecetypes`
 
-    >>> assert len(piecetypes) == 12
-    >>> assert piecetypes[:6] == piecetypes[6:].upper()
+    >>> assert len(PIECETYPES) == 12
+    >>> assert PIECETYPES[:6] == PIECETYPES[6:].upper()
 
     * An example of the game opening
 
@@ -93,9 +93,9 @@ def brepr(pos):
 
     * 64 elements correspond to 12 `piecetypes` by their piecevalues;
 
-    >>> assert all(map(piecevalues.__contains__,piecetypes))
-    >>> assert piecevalues.get(".") == 0
-    >>> assert len(piecevalues) == 13
+    >>> assert all(map(PIECEVALUES.__contains__,PIECETYPES))
+    >>> assert PIECEVALUES.get(".") == 0
+    >>> assert len(PIECEVALUES) == 13
 
     >>> p0 = tools.parseFEN(tools.FEN_INITIAL)
     >>> u0 = brepr(p0)
@@ -129,12 +129,10 @@ def brepr(pos):
     if pos.board.startswith("\n"): # is black
         pos = pos.rotate() # un-rotate to the  conventional orientation
     squares = np.array(list("".join(pos.board.split()))) # strip
-    return np.array(list(map(piecevalues.get,squares)),dtype=np.int8)
+    return np.array(list(map(PIECEVALUES.get,squares)),dtype=np.int8)
 
 
 if __name__ == '__main__':
 
     import doctest
     print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-    scripts = doctest.script_from_examples(
-        prepr.__doc__ + brepr.__doc__) # exec(scripts)
