@@ -263,7 +263,7 @@ class SunfishPolicy(object):
     """
     def __init__(self):
         self.upper = MATE_UPPER
-    def eval(self,pos):
+    def evaluate(self,pos):
         return pos.score
 
 
@@ -378,9 +378,9 @@ class Minimax(Engine):
     def maximize(self,pos,depth):
         self.nodes += 1
         if pos.gameover():
-            return [None,],self.policy.eval(pos)
+            return [None,],self.policy.evaluate(pos)
         if depth == 0:
-            return [],self.policy.eval(pos)
+            return [],self.policy.evaluate(pos)
         pv,maxscore = [],-self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
@@ -394,9 +394,9 @@ class Minimax(Engine):
         # black requires score sign reversion
         self.nodes += 1
         if pos.gameover():
-            return [None,],-self.policy.eval(pos)
+            return [None,],-self.policy.evaluate(pos)
         if depth == 0:
-            return [],-self.policy.eval(pos)
+            return [],-self.policy.evaluate(pos)
         pv,minscore = [],self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
@@ -439,9 +439,9 @@ class Negamax(Engine):
     def negamax(self,pos,depth,alpha,beta):
         self.nodes += 1
         if pos.gameover():
-            return [None,],self.policy.eval(pos)
+            return [None,],self.policy.evaluate(pos)
         if depth == 0:
-            return [],self.policy.eval(pos)
+            return [],self.policy.evaluate(pos)
         pv,maxscore = [],-self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
@@ -543,7 +543,7 @@ class AlphaBeta(Engine):
 
         """
         scoremoves = sorted(
-            (self.policy.eval(pos.move(move)),move)
+            (self.policy.evaluate(pos.move(move)),move)
             for move in pos.gen_moves())
         return (move for score,move in scoremoves)
 
@@ -560,7 +560,7 @@ class AlphaBeta(Engine):
             (depth <= -self.maxrecur) or
             (depth <= 0 and pos.capture == ".") # quiescence
             ):
-            return self.policy.eval(pos)
+            return self.policy.evaluate(pos)
         bestmove,maxscore = None,-self.upper
         moves = (self.sorted_gen_moves(pos) if self.pruning else
                      pos.gen_moves())
