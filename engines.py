@@ -48,7 +48,7 @@
 
   >>> b = AlphaBeta(showsearch=0,pruning=False)
   >>> b
-  AlphaBeta.SunfishPolicy.maxdepth15.maxrecur0
+  AlphaBeta.SunfishPolicy.maxdepth15.maxrecur0.nopruning
   >>> _,score_b = b.search(q5,secs=5)
   >>> pv_b = b.getpv(q5)
   >>> (pv_b,score_b) == (pv_m,score_m)
@@ -184,7 +184,7 @@ class Superposition(Position):
         pos,moves = self,[]
         for move in v:
             if move is None:
-                moves[-1] += "#"
+                moves[-1] += "!"
                 break
             moves.append(tools.mrender(pos,move))
             pos = pos.move(move)
@@ -283,9 +283,12 @@ class Engine(object):
         if hasattr(self,'policy'):
             name += "." + self.policy.__class__.__name__
         if hasattr(self,'maxdepth'):
-            name += ".maxdepth" + str(self.maxdepth)
+            name += '.maxdepth' + str(self.maxdepth)
         if hasattr(self,'maxrecur'):
-            name += ".maxrecur" + str(self.maxrecur)
+            name += '.maxrecur' + str(self.maxrecur)
+        if hasattr(self,'pruning'):
+            if not self.pruning:
+                name += '.nopruning'
         return name
 
 
@@ -599,7 +602,7 @@ class AlphaBeta(Engine):
         print('${} {}ms {}/{}/{} {}: {}'.format(
             depth,int(timespent*1000),
             self.hits,len(self.tt.od),self.nodes,
-            best.score,pv))
+            int(best.score),pv))
 
     def getpv(self,pos):
         pv = OrderedDict()
