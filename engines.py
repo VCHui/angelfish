@@ -29,7 +29,7 @@
   >>> pv_m,score_m = m.maximize(q5,m.maxdepth)
 
   >>> n.nodes = 0 # init search
-  >>> pv_n,score_n = n.negamax(q5,n.maxdepth,-n.upper,n.upper)
+  >>> pv_n,score_n = n.negamax(q5,n.maxdepth)
 
   >>> (pv_n,score_n) == (pv_m,score_m)
   True
@@ -439,7 +439,7 @@ class Negamax(Engine):
         self.upper = self.policy.upper
         self.showsearch = showsearch
 
-    def negamax(self,pos,depth,alpha,beta):
+    def negamax(self,pos,depth):
         self.nodes += 1
         if pos.gameover():
             return [None,],self.policy.evaluate(pos)
@@ -448,17 +448,16 @@ class Negamax(Engine):
         pv,maxscore = [],-self.upper
         for move in pos.gen_moves():
             nextpos = pos.move(move)
-            v,score = self.negamax(nextpos,depth-1,-beta,-alpha)
+            v,score = self.negamax(nextpos,depth-1)
             score = -score # nega
             if score >= maxscore:
                 pv,maxscore = [move,]+v,score
-                alpha = max(alpha,score)
         return pv,maxscore
 
     def search(self,pos,secs=NotImplemented):
         self.nodes = 0
         timestart = time.time()
-        pv,bestscore = self.negamax(pos,self.maxdepth,-self.upper,self.upper)
+        pv,bestscore = self.negamax(pos,self.maxdepth)
         timespent = time.time() - timestart
         if self.showsearch:
             print()
