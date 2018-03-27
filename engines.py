@@ -12,9 +12,9 @@
   >>> n
   Negamax.SunfishPolicy.maxdepth5
 
-  >>> FEN_MATE5 = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
-  >>> q5 = Superposition.init(FEN_MATE5)
-  >>> assert q5.board.split() == [
+  >>> FEN_KRk = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
+  >>> pos_KRk = Superposition.init(FEN_KRk)
+  >>> assert pos_KRk.board.split() == [
   ... '.k......',
   ... '........',
   ... '..K.....',
@@ -26,21 +26,21 @@
   ... ]
 
   >>> m.nodes = 0 # init search
-  >>> pv_m,score_m = m.maximize(q5,m.maxdepth)
+  >>> pv_m,score_m = m.maximize(pos_KRk,m.maxdepth)
 
   >>> n.nodes = 0 # init search
-  >>> pv_n,score_n = n.negamax(q5,n.maxdepth)
+  >>> pv_n,score_n = n.negamax(pos_KRk,n.maxdepth)
 
   >>> (pv_n,score_n) == (pv_m,score_m)
   True
 
-* AlphaBeta and Negamax should produce the same outcomes for `q5`
+* AlphaBeta and Negamax should produce the same outcomes for `pos_KRk`
 
   >>> a = AlphaBeta(showsearch=0)
   >>> a
   AlphaBeta.SunfishPolicy.maxdepth15.maxrecur0
-  >>> _,score_a = a.search(q5,secs=5)
-  >>> pv_a = a.getpv(q5)
+  >>> _,score_a = a.search(pos_KRk,secs=5)
+  >>> pv_a = a.getpv(pos_KRk)
   >>> (pv_a,score_a) == (pv_m,score_m)
   True
 
@@ -49,8 +49,8 @@
   >>> b = AlphaBeta(showsearch=0,pruning=False)
   >>> b
   AlphaBeta.SunfishPolicy.maxdepth15.maxrecur0.nopruning
-  >>> _,score_b = b.search(q5,secs=5)
-  >>> pv_b = b.getpv(q5)
+  >>> _,score_b = b.search(pos_KRk,secs=5)
+  >>> pv_b = b.getpv(pos_KRk)
   >>> (pv_b,score_b) == (pv_m,score_m)
   True
 
@@ -59,8 +59,8 @@
   >>> s = Sunfish(showsearch=0)
   >>> s
   Sunfish
-  >>> _,score_s = s.search(q5,secs=5)
-  >>> pv_s = s.getpv(q5)
+  >>> _,score_s = s.search(pos_KRk,secs=5)
+  >>> pv_s = s.getpv(pos_KRk)
   >>> pv_s == pv_m[:len(pv_s)]
   True
 
@@ -116,9 +116,9 @@ class Superposition(Position):
 
     * legal move tests
 
-      >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
-      >>> q2 = Superposition.init(FEN_MATE0)
-      >>> assert q2.board.split() == [ # *black plays "K"*
+      >>> FEN_kQK = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
+      >>> pos_kQK = Superposition.init(FEN_kQK)
+      >>> assert pos_kQK.board.split() == [ # *black plays "K"*
       ... '........',
       ... '........',
       ... '........',
@@ -129,7 +129,7 @@ class Superposition(Position):
       ... 'K.......',
       ... ]
       >>>
-      >>> not any(map(q2.legal,q2.gen_moves())) # checkmate!
+      >>> not any(map(pos_kQK.legal,pos_kQK.gen_moves())) # checkmate!
       True
 
     """
@@ -226,38 +226,40 @@ def play(white,black,plies=200,secs=1,fen=tools.FEN_INITIAL):
 class SunfishPolicy(object):
     """Encapsulation of `pos.score` and `pos.value` of :mod:`sunfish`
 
-    * use ``FEN_MATE0`` as in :class:`Superposition`
+    * use ``FEN_kQK`` as in :class:`Superposition`
 
-      >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
-      >>> q2 = Superposition.init(FEN_MATE0)
+      >>> FEN_kQK = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
+      >>> pos_kQK = Superposition.init(FEN_kQK)
 
     * **board score is anti-symmetric**
 
-      >>> assert q2.score == -q2.rotate().score
+      >>> assert pos_kQK.score == -pos_kQK.rotate().score
 
     * moves and :meth:`Position.value`
 
-      >>> q2.board.find("K"), q2.board.find("q")
+      >>> pos_kQK.board.find("K"), pos_kQK.board.find("q")
       (91, 82)
-      >>> tuple(q2.gen_moves())
+      >>> tuple(pos_kQK.gen_moves())
       ((91, 81), (91, 92), (91, 82))
-      >>> q2.value((91,82)) > q2.value((91,92)) > q2.value((91,81))
+      >>> (pos_kQK.value((91,82)) >
+      ...  pos_kQK.value((91,92)) >
+      ...  pos_kQK.value((91,81)))
       True
-      >>> q3 = q2.move((91,82)) # black captures white "q"
+      >>> pos_kK = pos_kQK.move((91,82)) # black captures white "q"
 
     * **score of a new position**
 
-      >>> assert q3.score == -(q2.score + q2.value((91,82)))
+      >>> assert pos_kK.score == -(pos_kQK.score + pos_kQK.value((91,82)))
 
     * checkmate
 
-      >>> q3.board.find("K"), q3.board.find("k")
+      >>> pos_kK.board.find("K"), pos_kK.board.find("k")
       (46, 37)
-      >>> MATE_UPPER > q3.value((46,37)) > MATE_LOWER
+      >>> MATE_UPPER > pos_kK.value((46,37)) > MATE_LOWER
       True
-      >>> len(list(q3.gen_moves())) == 8
+      >>> len(list(pos_kK.gen_moves())) == 8
       True
-      >>> max(map(q3.value,q3.gen_moves())) == q3.value((46,37))
+      >>> max(map(pos_kK.value,pos_kK.gen_moves())) == pos_kK.value((46,37))
       True
 
     """
@@ -530,16 +532,16 @@ class AlphaBeta(Engine):
         * ascending scores for the next player is equivalent to
           descending value for moves of the current player;
 
-        >>> FEN_MATE0 = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
-        >>> q2 = Superposition.init(FEN_MATE0)
-        >>> q2.board.find("K"), q2.board.find("q")
+        >>> FEN_kQK = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'
+        >>> pos_kQK = Superposition.init(FEN_kQK)
+        >>> pos_kQK.board.find("K"), pos_kQK.board.find("q")
         (91, 82)
         >>> a = AlphaBeta()
-        >>> moves = list(a.sorted_gen_moves(q2))
+        >>> moves = list(a.sorted_gen_moves(pos_kQK))
 
         >>> moves
         [(91, 82), (91, 92), (91, 81)]
-        >>> scores = list(q2.move(move).score for move in moves)
+        >>> scores = list(pos_kQK.move(move).score for move in moves)
         >>> scores[0] < scores[1] < scores[2]
         True
 
@@ -640,6 +642,8 @@ if __name__ == '__main__':
 
     if sys.argv[0] == "": # if the python session is inside an emacs buffer
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
+        FEN_KRk = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
+        pos_KRk = Superposition.init(FEN_KRk)
     else:
         if len(sys.argv) == 3:
             white = enginedict[sys.argv[1]]()
