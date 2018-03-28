@@ -419,7 +419,7 @@ class Minimax(Engine):
             print()
             print('${} {}ms {} {}: {}'.format(
                 self.maxdepth,int(timespent*1000),
-                self.nodes,bestscore,pos.mrender(pv)))
+                self.nodes,bestscore,",".join(pos.mrender(pv))))
         return pos.legal(pv[0]),bestscore
 
 
@@ -465,7 +465,7 @@ class Negamax(Engine):
             print()
             print('${} {}ms {} {}: {}'.format(
                 self.maxdepth,int(timespent*1000),
-                self.nodes,bestscore,pos.mrender(pv)))
+                self.nodes,bestscore,",".join(pos.mrender(pv))))
         return pos.legal(pv[0]),bestscore
 
 
