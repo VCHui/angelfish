@@ -526,6 +526,16 @@ class AlphaBeta(Engine):
         self.showsearch = showsearch
         self.pruning = pruning
 
+    @classmethod
+    def NoPruning(
+            this,
+            maxdepth = MAXDEPTH,
+            maxrecur = 0, # quiescence search disabled
+            policy = SunfishPolicy(),
+            showsearch = 1
+            ):
+        return this(maxdepth,maxrecur,policy,showsearch,pruning=False)
+
     def sorted_gen_moves(self,pos):
         """return `moves` in ascending order of the next move scores
 
@@ -629,6 +639,7 @@ enginedict = OrderedDict(
     Minimax=Minimax,
     Negamax=Negamax,
     AlphaBeta=AlphaBeta,
+    AlphaBetaNoPruning=AlphaBeta.NoPruning,
     )
 
 
