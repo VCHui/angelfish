@@ -317,13 +317,14 @@ class Sunfish(Searcher,Engine):
 
     def show(self,pos,depth,timespent):
         entry = self.tp_score.get((pos,depth,True))
-        pv = ",".join(pos.mrender(self.getpv(pos)))
+        pv = self.getpv(pos)
+        mpv = ",".join(pos.mrender(pv))
         if depth == 1:
             print()
         print('${} {}ms {}/{} {}: {}'.format(
             depth,int(timespent*1000),
             self.nodes,len(self.tp_move.od),
-            entry.lower,pv))
+            entry.lower,mpv))
 
     def getpv(self,pos):
         """return `pv` from `pos` using :attr:`tp_move`
@@ -414,12 +415,13 @@ class Minimax(Engine):
         self.nodes = 0
         timestart = time.time()
         pv,bestscore = self.maximize(pos,self.maxdepth)
+        mpv = ",".join(pos.mrender(pv))
         timespent = time.time() - timestart
         if self.showsearch:
             print()
             print('${} {}ms {} {}: {}'.format(
                 self.maxdepth,int(timespent*1000),
-                self.nodes,bestscore,",".join(pos.mrender(pv))))
+                self.nodes,bestscore,mpv))
         return pos.legal(pv[0]),bestscore
 
 
@@ -460,12 +462,13 @@ class Negamax(Engine):
         self.nodes = 0
         timestart = time.time()
         pv,bestscore = self.negamax(pos,self.maxdepth)
+        mpv = ",".join(pos.mrender(pv))
         timespent = time.time() - timestart
         if self.showsearch:
             print()
             print('${} {}ms {} {}: {}'.format(
                 self.maxdepth,int(timespent*1000),
-                self.nodes,bestscore,",".join(pos.mrender(pv))))
+                self.nodes,bestscore,mpv))
         return pos.legal(pv[0]),bestscore
 
 
@@ -607,13 +610,13 @@ class AlphaBeta(Engine):
     def show(self,pos,timespent,depth):
         best = self.tt.get(pos)
         pv = self.getpv(pos)
-        pv = ",".join(pos.mrender(pv))
+        mpv = ",".join(pos.mrender(pv))
         if depth == 1:
             print()
         print('${} {}ms {}/{}/{} {}: {}'.format(
             depth,int(timespent*1000),
             self.hits,len(self.tt.od),self.nodes,
-            int(best.score),pv))
+            int(best.score),mpv))
 
     def getpv(self,pos):
         pv = OrderedDict()
@@ -631,6 +634,34 @@ class AlphaBeta(Engine):
             pv[pos] = entry.move
             pos = pos.move(entry.move)
         return list(pv.values())
+
+    def walktree(self,pos,depth,stem=[]):
+        entry = self.tt.get(pos)
+        if entry is None:
+            return []
+        yield entry.score,stem,pos,self.getpv(pos)
+        if depth > 0:
+            moves = list(pos.gen_moves())
+            moves.remove(entry.move)
+            for move in moves:
+                nextstem = stem + [move]
+                nextpos = pos.move(move)
+                for walk in self.walktree(nextpos,depth-1,nextstem):
+                    yield walk
+
+    def print_tree(self,rootpos,depth):
+        for score,stem,pos,pv in self.walktree(rootpos,depth):
+            plys = len(stem) + len(pv)
+            r = "" # a string of move sequence of a branch
+            if len(stem) > 0: # for any non-pv
+                r = rootpos.mrender(stem)
+                r = " "*len(r) + " "*len("".join(r[:-1])) + r[-1]
+            # r = "+".join(rootpos.mrender(stem))
+            r += "*" + "-".join(pos.mrender(pv))
+            payoff = 0
+            if r[-1] == "!": # gameover
+                payoff = -1 if plys%2 else 1
+            print('{:+>2}  {:>6}  {}'.format(payoff,score,r))
 
 
 enginedict = OrderedDict(
@@ -651,10 +682,11 @@ if __name__ == '__main__':
     docscript = lambda obj=None: doctest.script_from_examples(
         __doc__ if obj is None else getattr(obj,'__doc__'))
 
+    FEN_KRk = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
+    pos_KRk = Superposition.init(FEN_KRk)
+
     if sys.argv[0] == "": # if the python session is inside an emacs buffer
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
-        FEN_KRk = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
-        pos_KRk = Superposition.init(FEN_KRk)
     else:
         if len(sys.argv) == 3:
             white = enginedict[sys.argv[1]]()
