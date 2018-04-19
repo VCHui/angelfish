@@ -652,16 +652,22 @@ class AlphaBeta(Engine):
     def print_tree(self,rootpos,depth):
         for score,stem,pos,pv in self.walktree(rootpos,depth):
             plys = len(stem) + len(pv)
-            r = "" # a string of move sequence of a branch
+            branch = ""
             if len(stem) > 0: # for any non-pv
-                r = rootpos.mrender(stem)
-                r = " "*len(r) + " "*len("".join(r[:-1])) + r[-1]
-            # r = "+".join(rootpos.mrender(stem))
-            r += "*" + "-".join(pos.mrender(pv))
+                moves = rootpos.mrender(stem)
+                branch = " "*len(moves) # "*" indents
+                branch += " "*len("".join(moves[:-1])) # stem moves indents
+                branch += moves[-1] # branch head
+            branch += "*" + "-".join(pos.mrender(pv))
             payoff = 0
-            if r[-1] == "!": # gameover
+            if branch[-1] == "!": # gameover
                 payoff = -1 if plys%2 else 1
-            print('{:+>2}  {:>6}  {}'.format(payoff,score,r))
+            for move in pv:
+                if move is not None:
+                    pos = pos.move(move)
+            nega = (-1)**(len(pv) - int(pv[-1] is None))
+            print('{:+>2}  {:>6}({:+>2}) {:>6} [{}][{}] {}'.format(
+                payoff,score,nega,pos.score,len(stem),len(pv),branch))
 
 
 enginedict = OrderedDict(
@@ -684,6 +690,9 @@ if __name__ == '__main__':
 
     FEN_KRk = '1k6/8/2K5/3R4/8/8/8/8 w - - 0 1' # 5 plies to checkmate
     pos_KRk = Superposition.init(FEN_KRk)
+
+    FEN_kQK = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1' # next move checkmate
+    pos_kQK = Superposition.init(FEN_kQK)
 
     if sys.argv[0] == "": # if the python session is inside an emacs buffer
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
