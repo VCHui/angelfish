@@ -80,7 +80,7 @@ class SunfishNET(nn.Module):
 
     def __init__(self):
         super(SunfishNET,self).__init__()
-        self.pst = nn.Linear(SunfishNET.N,1,bias=False)
+        self.pst = nn.Linear(self.N,1,bias=False)
         self.init()
 
     def forward(self,x):
@@ -88,6 +88,7 @@ class SunfishNET(nn.Module):
         return F.hardtanh(y,-MATE_UPPER,MATE_UPPER)
 
     def init(self):
+        """assign sunfish ``pst`` to ``self.pst``:"""
         for i,piecetype in enumerate(PIECETYPES):
             n = i*64
             table = np.array(pst[piecetype],dtype=float)
@@ -96,24 +97,35 @@ class SunfishNET(nn.Module):
             self.pst.weight.data[0,n:n+64] = FloatTensor(table.flatten())
 
     def aeval(self,a):
-        """return the evaluation of `a` of `abrepr(pos)`;"""
+        """return the evaluation of `a` of `abrepr(pos)`:"""
         a = Variable(FloatTensor(a))
         y = self.forward(a)
         return y.data[0]
 
     def peval(self,pos):
-        """return the evaluation of `pos`;"""
+        """return the evaluation of `pos`:"""
         return self.aeval(abrepr(pos))
 
     def feval(self,fen):
-        """return the evaluation of `fen`;"""
+        """return the evaluation of `fen`:"""
         return self.peval(tools.parseFEN(fen))
 
     def verify(self,fen):
+        """print a verification of the forward output against ``pos.score``:"""
         pos = tools.parseFEN(fen)
         score = int(self.peval(pos))
         assertion = score == pos.score
         print('{:>7} {} {!r}'.format(score,assertion,fen))
+
+    def printpst(self,indent=" "*4):
+        """print the pst as csv:"""
+        csv = (indent + '{:6},'*8).format
+        bigtable = self.pst.weight.data.numpy().astype(int)
+        bigtable.shape = (len(PIECETYPES),8,8)
+        for i in range(len(PIECETYPES)):
+            for r in range(8):
+                print(csv(*tuple(bigtable[i,r])))
+
 
 
 
@@ -122,15 +134,15 @@ if __name__ == '__main__':
     import sys, os, doctest
     from sunfish import tools
 
-    pstn = SunfishNET()
+    nn = SunfishNET()
 
     if sys.argv[0] == "": # if the python session is inside an emacs buffer
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
         with open('sunfish/tests/mate1.fen',"r") as f:
             for fen in f:
-                  pstn.verify(fen.strip())
+                  nn.verify(fen.strip())
     else:
         if len(sys.argv) == 1:
             print('usage:',sys.argv[0],'[fen]')
         else:
-            pstn.overify(sys.argv[1])
+            nn.overify(sys.argv[1])
