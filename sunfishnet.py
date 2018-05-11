@@ -98,9 +98,10 @@ class SunfishNET(nn.Module):
 
     def aeval(self,a):
         """return the evaluation of `a` of `abrepr(pos)`:"""
+        a.shape = (1,self.N)
         a = Variable(FloatTensor(a))
         y = self.forward(a)
-        return y.data[0]
+        return y.data[0][0]
 
     def peval(self,pos):
         """return the evaluation of `pos`:"""
