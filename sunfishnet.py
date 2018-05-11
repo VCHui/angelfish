@@ -128,6 +128,9 @@ class SunfishNET(nn.Module):
                 print(csv(*tuple(bigtable[i,r]))
                           + label(r+1,PIECETYPES[i]))
 
+    def __repr__(self):
+        lines = super(SunfishNET,self).__repr__()
+        return "# " + "# ".join(lines.splitlines(True))
 
 
 
@@ -139,6 +142,7 @@ if __name__ == '__main__':
 
     if sys.argv[0] == "": # if the python session is inside an emacs buffer
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
+        print(sunfishnet)
         with open('sunfish/tests/mate1.fen',"r") as f:
             for fen in f:
                   sunfishnet.verify(fen.strip())
