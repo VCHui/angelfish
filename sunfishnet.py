@@ -117,14 +117,16 @@ class SunfishNET(nn.Module):
         assertion = score == pos.score
         print('{:>7} {} {!r}'.format(score,assertion,fen))
 
-    def printpst(self,indent=" "*4):
+    def printpst(self,indent=""):
         """print the pst as csv:"""
-        csv = (indent + '{:6},'*8).format
+        csv = (indent + '{:7},'*8).format
+        label = '   #+{}{}'.format
         bigtable = self.pst.weight.data.numpy().astype(int)
         bigtable.shape = (len(PIECETYPES),8,8)
         for i in range(len(PIECETYPES)):
             for r in range(8):
-                print(csv(*tuple(bigtable[i,r])))
+                print(csv(*tuple(bigtable[i,r]))
+                          + label(r+1,PIECETYPES[i]))
 
 
 
@@ -132,17 +134,16 @@ class SunfishNET(nn.Module):
 if __name__ == '__main__':
 
     import sys, os, doctest
-    from sunfish import tools
 
-    nn = SunfishNET()
+    sunfishnet = SunfishNET()
 
     if sys.argv[0] == "": # if the python session is inside an emacs buffer
         print(doctest.testmod(optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
         with open('sunfish/tests/mate1.fen',"r") as f:
             for fen in f:
-                  nn.verify(fen.strip())
+                  sunfishnet.verify(fen.strip())
     else:
         if len(sys.argv) == 1:
             print('usage:',sys.argv[0],'[fen]')
         else:
-            nn.overify(sys.argv[1])
+            sunfishnet.verify(sys.argv[1])
