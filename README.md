@@ -1,6 +1,10 @@
 # angelfish
 Some exercise implementations of chess engines using the very nice [sunfish](https://github.com/thomasahle/sunfish) framework and tools
 
+## [mlearn branch](https://github.com/VC-H/angelfish/tree/mlearn)
+* The branch holds experiments of reinforcement learning.
+* The main goal of [angelfish](https://github.com/VC-H/angelfish) project.
+
 ## Engines implemented
 In order of increasing performance:
 * Minimax
