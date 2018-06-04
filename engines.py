@@ -135,7 +135,7 @@ class Superposition(Position):
     """
 
     @classmethod
-    def init(this,fen):
+    def init(this,fen=tools.FEN_INITIAL):
         return this(*tools.parseFEN(fen))
 
     @property
